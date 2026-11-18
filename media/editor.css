@@ -1,0 +1,524 @@
+:root {
+  --bg: var(--vscode-editor-background, #1b1d23);
+  --panel: var(--vscode-sideBar-background, #22252c);
+  --fg: var(--vscode-foreground, #d7dae0);
+  --muted: var(--vscode-descriptionForeground, #8b909a);
+  --line: var(--vscode-panel-border, #ffffff1a);
+  --focus: var(--vscode-focusBorder, #3b82f6);
+  --run: #1f9d55;
+  --run-hi: #23b562;
+  --stop: #d93f3f;
+  --font: var(--vscode-font-family, "Segoe UI", system-ui, sans-serif);
+  --mono: var(--vscode-editor-font-family, Consolas, monospace);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--fg);
+  font: 13px/1.4 var(--font);
+}
+
+body { display: flex; flex-direction: column; }
+
+/* ---------- top bar ---------- */
+#bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: 44px;
+  padding: 0 10px 0 14px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+
+.brand { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.brand svg { width: 20px; height: 20px; flex: none; }
+.brand b { font-weight: 700; letter-spacing: 0.01em; }
+.brand .file {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.actions { display: flex; align-items: center; gap: 6px; }
+
+button {
+  font: inherit;
+  font-weight: 600;
+  color: inherit;
+  border: 0;
+  border-radius: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+button:disabled { opacity: 0.38; cursor: default; }
+
+.ghost { background: transparent; color: var(--fg); }
+.ghost:hover:not(:disabled) { background: color-mix(in srgb, var(--fg) 10%, transparent); }
+
+.run {
+  background: var(--run);
+  color: #fff;
+  padding: 7px 16px 7px 13px;
+  border-radius: 999px;
+  box-shadow: 0 2px 0 color-mix(in srgb, var(--run) 55%, #000);
+}
+.run:hover { background: var(--run-hi); }
+.run:active { transform: translateY(1px); box-shadow: 0 1px 0 color-mix(in srgb, var(--run) 55%, #000); }
+.tri { width: 0; height: 0; border-left: 10px solid #fff; border-top: 6px solid transparent; border-bottom: 6px solid transparent; }
+
+.stop { background: transparent; color: var(--fg); }
+.stop:not(:disabled) { background: var(--stop); color: #fff; }
+.sq { width: 10px; height: 10px; border-radius: 2px; background: currentColor; }
+
+body.running .run { animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse {
+  50% { box-shadow: 0 2px 0 color-mix(in srgb, var(--run) 55%, #000), 0 0 0 5px color-mix(in srgb, var(--run) 30%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) { body.running .run { animation: none; } }
+
+#banner {
+  flex: none;
+  padding: 8px 14px;
+  background: var(--vscode-inputValidation-errorBackground, #5a1d1d);
+  border-bottom: 1px solid var(--vscode-inputValidation-errorBorder, #be1100);
+}
+
+/* ---------- blockly ---------- */
+#work { flex: 1; display: flex; min-height: 0; }
+#stage { flex: 1; position: relative; min-height: 0; min-width: 0; display: flex; }
+#blockly { flex: 1; position: relative; min-height: 0; }
+
+.blocklyToolbox, .blocklyToolboxDiv {
+  border-right: 1px solid var(--line);
+  padding: 6px 0;
+}
+.blocklyToolboxCategory, .blocklyTreeRow {
+  height: auto !important;
+  padding: 7px 14px 7px 10px !important;
+  margin: 1px 6px !important;
+  border-radius: 8px;
+  border-left-width: 0 !important;
+}
+.blocklyTreeLabel, .blocklyToolboxCategoryLabel {
+  font: 600 13px var(--font) !important;
+  color: var(--fg);
+}
+.blocklyTreeRow:not(.blocklyTreeSelected):hover,
+.blocklyToolboxCategory:not(.blocklyToolboxSelected):hover {
+  background: color-mix(in srgb, var(--fg) 8%, transparent) !important;
+}
+.blocklyTreeSelected .blocklyTreeLabel, .blocklyToolboxSelected .blocklyToolboxCategoryLabel { color: #fff; }
+
+.blocklyFlyoutButton .blocklyFlyoutButtonBackground { stroke: none; }
+.blocklyFlyoutButton { fill: color-mix(in srgb, var(--fg) 12%, transparent); }
+.blocklyFlyoutButton text, .blocklyFlyoutButtonText { fill: var(--fg) !important; font-weight: 600; }
+.blocklyFlyoutButton:hover { fill: color-mix(in srgb, var(--fg) 20%, transparent); }
+.tbTypeBtn .blocklyFlyoutButtonText, .tbTypeBtn text { font-family: var(--mono) !important; font-weight: 500; }
+.blocklyFlyoutLabelText { fill: var(--muted) !important; font-size: 11px; }
+
+.blocklyMainBackground { stroke: none !important; }
+.blocklyWidgetDiv .blocklyMenu, .blocklyDropDownDiv { font-family: var(--font); }
+
+/* ---------- modal ---------- */
+#modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: color-mix(in srgb, #000 45%, transparent);
+}
+#modal[hidden] { display: none; }
+
+.card {
+  width: min(380px, 100%);
+  background: var(--vscode-editorWidget-background, var(--panel));
+  color: var(--fg);
+  border: 1px solid var(--vscode-editorWidget-border, var(--line));
+  border-radius: 14px;
+  padding: 18px;
+  box-shadow: 0 18px 50px #0007;
+}
+.card h2 { margin: 0 0 12px; font-size: 15px; font-weight: 700; }
+.card p { margin: -4px 0 12px; color: var(--muted); }
+
+#mInput {
+  width: 100%;
+  font: 14px var(--mono);
+  padding: 8px 10px;
+  color: var(--vscode-input-foreground, var(--fg));
+  background: var(--vscode-input-background, #0003);
+  border: 1px solid var(--vscode-input-border, var(--line));
+  border-radius: 8px;
+  outline: none;
+}
+#mInput:focus { border-color: var(--focus); }
+
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.chip {
+  font: 500 12px var(--mono);
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--fg) 9%, transparent);
+}
+.chip.on { background: #2F7FDB; color: #fff; }
+
+.row { display: flex; gap: 8px; margin-top: 18px; align-items: center; }
+.grow { flex: 1; }
+.primary { background: var(--vscode-button-background, #2F7FDB); color: var(--vscode-button-foreground, #fff); }
+.primary:hover { background: var(--vscode-button-hoverBackground, #2a6fc0); }
+.danger { background: transparent; color: var(--stop); }
+.danger:hover { background: color-mix(in srgb, var(--stop) 15%, transparent); }
+
+@media (max-width: 520px) {
+  .brand .file, #cleanUp { display: none; }
+}
+
+/* category dots (color copied from Blockly's inline border by main.ts) */
+.blocklyToolboxCategory { border-left: 0 !important; }
+.blocklyToolboxCategoryIcon {
+  width: 14px !important;
+  height: 14px !important;
+  flex: none;
+  margin-right: 10px;
+  border-radius: 50%;
+  background: var(--cat, #888);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, #000 18%, transparent);
+  vertical-align: -2px;
+  visibility: visible !important;
+}
+.blocklyToolboxSelected .blocklyToolboxCategoryIcon { box-shadow: 0 0 0 2px #fff; }
+.blocklyTreeRowContentContainer { display: flex; align-items: center; }
+
+.code { font-style: normal; font-family: var(--mono); font-size: 11px; opacity: 0.8; }
+
+/* raw TypeScript lines inside code blocks */
+.tbCode, .blocklyText.tbCode { font-family: var(--mono) !important; font-weight: 500 !important; }
+.tbCodeMore { opacity: 0.75; font-style: italic; }
+/* index numbers in array blocks */
+.tbIndex, .blocklyText.tbIndex { font-size: 10px !important; font-weight: 700 !important; opacity: 0.85; }
+.tbHint .blocklyFlyoutLabelText, .tbHint text { font-size: 11px !important; }
+
+#modal.wide .card { width: min(720px, 100%); }
+#mCode {
+  width: 100%;
+  min-height: 260px;
+  resize: vertical;
+  font: 13px/1.5 var(--mono);
+  tab-size: 2;
+  padding: 10px 12px;
+  color: var(--vscode-input-foreground, var(--fg));
+  background: var(--vscode-input-background, #0003);
+  border: 1px solid var(--vscode-input-border, var(--line));
+  border-radius: 8px;
+  outline: none;
+}
+#mCode:focus { border-color: var(--focus); }
+
+/* ---------- live array preview ---------- */
+#arrays {
+  position: relative;
+  flex: 0 1 auto;
+  min-height: 34px;
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  background: var(--vscode-editorWidget-background, var(--panel));
+  border: 1px solid var(--vscode-editorWidget-border, var(--line));
+  border-radius: 12px;
+  box-shadow: 0 10px 30px #0005;
+  overflow: hidden;
+}
+#arrays[hidden] { display: none; }
+.arraysHead {
+  justify-content: space-between;
+  width: 100%;
+  border-radius: 0;
+  padding: 8px 12px;
+  background: #C8396A;
+  color: #fff;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+.chev { width: 8px; height: 8px; border-right: 2px solid #fff; border-bottom: 2px solid #fff; transform: rotate(45deg) translateY(-2px); }
+#arrays.collapsed .chev { transform: rotate(-135deg) translateY(-2px); }
+#arrays.collapsed #arraysBody { display: none; }
+#arraysBody { overflow: auto; padding: 8px 12px 12px; display: grid; gap: 12px; }
+.arrHead { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 5px; }
+.arrHead b { font-family: var(--mono); font-size: 13px; }
+.arrHead span { color: var(--muted); font-size: 11px; }
+.cells { display: flex; flex-wrap: wrap; gap: 4px; }
+.cell {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 44px;
+  border-radius: 7px;
+  overflow: hidden;
+  border: 2px solid #C8396A;
+  cursor: pointer;
+}
+.cell i {
+  font-style: normal;
+  font: 700 10px var(--mono);
+  text-align: center;
+  padding: 1px 4px;
+  background: #C8396A;
+  color: #fff;
+}
+.cell span {
+  font: 12px var(--mono);
+  padding: 4px 7px;
+  text-align: center;
+  white-space: nowrap;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cell span.str { color: var(--vscode-debugTokenExpression-string, #ce9178); }
+.cell:hover { border-color: #e2568a; }
+.empty { color: var(--muted); font: 12px var(--mono); }
+
+/* ---------- console ---------- */
+#console {
+  --con-bg: var(--vscode-panel-background, var(--vscode-editor-background, #1b1d23));
+  --con-fg: var(--vscode-terminal-foreground, var(--fg));
+  flex: none;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--con-bg);
+  border-top: 1px solid var(--line);
+  transition: height 0.18s ease;
+}
+#console.dragging { transition: none; }
+#console.folded { height: 34px !important; }
+#console.folded #conBody, #console.folded #conResize { display: none; }
+#console.folded #conFold svg { transform: rotate(0deg); }
+#conFold svg { transform: rotate(180deg); transition: transform 0.18s ease; }
+
+#conResize {
+  position: absolute;
+  top: -4px;
+  left: 0;
+  right: 0;
+  height: 8px;
+  cursor: ns-resize;
+  z-index: 2;
+}
+#conResize:hover, #console.dragging #conResize { background: linear-gradient(transparent 3px, var(--focus) 3px, var(--focus) 5px, transparent 5px); }
+
+#conHead {
+  flex: none;
+  height: 33px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 6px 0 14px;
+  user-select: none;
+}
+#conStatus { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+#conStatus i { width: 8px; height: 8px; border-radius: 50%; background: color-mix(in srgb, var(--muted) 60%, transparent); }
+#conStatus[data-kind="run"] { color: var(--fg); }
+#conStatus[data-kind="run"] i { background: var(--run-hi); box-shadow: 0 0 0 0 color-mix(in srgb, var(--run-hi) 60%, transparent); animation: beat 1.4s ease-out infinite; }
+#conStatus[data-kind="ok"] i { background: var(--run-hi); }
+#conStatus[data-kind="err"] { color: var(--stop); }
+#conStatus[data-kind="err"] i { background: var(--stop); }
+@keyframes beat { 70% { box-shadow: 0 0 0 6px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+@media (prefers-reduced-motion: reduce) { #conStatus i { animation: none !important; } #console { transition: none; } }
+#conTime { font: 11px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+
+button.icon { width: 26px; height: 26px; padding: 0; justify-content: center; background: transparent; color: var(--muted); border-radius: 6px; }
+button.icon:hover { background: color-mix(in srgb, var(--fg) 10%, transparent); color: var(--fg); }
+button.icon svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+
+#conBody { flex: 1; min-height: 0; overflow: auto; padding: 2px 16px 10px; cursor: text; }
+#conOut {
+  margin: 0;
+  font: 13px/1.6 var(--mono);
+  color: var(--con-fg);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.conEmpty { color: var(--muted); font-family: var(--font); font-size: 12px; padding: 6px 0; }
+#conOut .err { color: var(--vscode-terminal-ansiRed, #f07178); }
+#conOut .echo { color: var(--vscode-terminal-ansiCyan, #5fc4d6); }
+#conOut .b { font-weight: 700; }
+#conOut .d { opacity: 0.6; }
+.c-black { color: var(--vscode-terminal-ansiBlack, #555); }
+.c-red { color: var(--vscode-terminal-ansiRed, #f07178); }
+.c-green { color: var(--vscode-terminal-ansiGreen, #4ec36b); }
+.c-yellow { color: var(--vscode-terminal-ansiYellow, #e5c07b); }
+.c-blue { color: var(--vscode-terminal-ansiBlue, #61afef); }
+.c-magenta { color: var(--vscode-terminal-ansiMagenta, #c678dd); }
+.c-cyan { color: var(--vscode-terminal-ansiCyan, #56b6c2); }
+.c-white { color: var(--vscode-terminal-ansiWhite, #dcdfe4); }
+.c-brightBlack { color: var(--vscode-terminal-ansiBrightBlack, #7f848e); }
+.c-brightRed { color: var(--vscode-terminal-ansiBrightRed, #ff7b85); }
+.c-brightGreen { color: var(--vscode-terminal-ansiBrightGreen, #7ee787); }
+.c-brightYellow { color: var(--vscode-terminal-ansiBrightYellow, #f2d48a); }
+.c-brightBlue { color: var(--vscode-terminal-ansiBrightBlue, #79c0ff); }
+.c-brightMagenta { color: var(--vscode-terminal-ansiBrightMagenta, #d2a8ff); }
+.c-brightCyan { color: var(--vscode-terminal-ansiBrightCyan, #76e3ea); }
+.c-brightWhite { color: var(--vscode-terminal-ansiBrightWhite, #fff); }
+
+/* run separators: a quiet rule with a label */
+#conOut .sep {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0 4px;
+  font: 500 11px var(--font);
+  color: var(--muted);
+  white-space: nowrap;
+}
+#conOut .sep::before { content: ""; width: 14px; height: 1px; background: color-mix(in srgb, currentColor 45%, transparent); }
+#conOut .sep::after { content: ""; flex: 1; height: 1px; background: color-mix(in srgb, currentColor 30%, transparent); }
+#conOut .sep-start { color: var(--muted); }
+#conOut .sep-ok { color: color-mix(in srgb, var(--run-hi) 85%, var(--fg)); }
+#conOut .sep-err { color: var(--stop); }
+#conOut .sep:first-child { margin-top: 4px; }
+
+#conForm { display: none; align-items: center; gap: 8px; margin-top: 2px; }
+#console.running #conForm { display: flex; }
+.caret { color: var(--run-hi); font: 700 15px var(--mono); line-height: 1; }
+#conInput {
+  flex: 1;
+  min-width: 0;
+  font: 13px var(--mono);
+  color: var(--con-fg);
+  background: transparent;
+  border: 0;
+  outline: none;
+  padding: 4px 0;
+}
+#conInput::placeholder { color: color-mix(in srgb, var(--muted) 70%, transparent); }
+
+/* ---------- floating stack (Arrays card + console card) ---------- */
+#floatStack {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  z-index: 50;
+  width: min(380px, calc(100% - 28px));
+  max-height: calc(100% - 28px);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 10px;
+  pointer-events: none;
+}
+
+/* ---------- console: right dock ---------- */
+#console[data-layout="right"] { border-top: 0; border-left: 1px solid var(--line); height: auto; }
+#console[data-layout="right"] #conResize { top: 0; bottom: 0; left: -4px; right: auto; width: 8px; height: auto; cursor: ew-resize; }
+#console[data-layout="right"] #conResize:hover, #console[data-layout="right"].dragging #conResize { background: linear-gradient(90deg, transparent 3px, var(--focus) 3px, var(--focus) 5px, transparent 5px); }
+#console[data-layout="right"].folded { height: auto !important; width: 38px !important; }
+#console[data-layout="right"].folded #conHead { flex-direction: column; height: auto; padding: 10px 0; gap: 12px; }
+#console[data-layout="right"].folded #conHead > :not(#conStatus):not(#conFold) { display: none; }
+#console[data-layout="right"].folded #conStatus { flex-direction: column; }
+#console[data-layout="right"].folded #conStatus span { writing-mode: vertical-rl; }
+#console[data-layout="right"].folded #conFold svg { transform: rotate(-90deg); }
+#console[data-layout="right"]:not(.folded) #conFold svg { transform: rotate(90deg); }
+#console[data-layout="right"] #layoutMenu { top: calc(100% + 6px); bottom: auto; }
+
+/* ---------- console: card (like the Arrays card) ---------- */
+#console[data-layout^="float"] {
+  --card-accent: #8A63E8;
+  pointer-events: auto;
+  border: 1px solid var(--vscode-editorWidget-border, var(--line));
+  border-radius: 12px;
+  background: var(--vscode-editorWidget-background, var(--panel));
+  box-shadow: 0 10px 30px #0005;
+  overflow: visible;
+  flex: 0 1 auto;
+  min-height: 34px;
+}
+#console[data-layout^="float"].folded { height: 34px !important; }
+#console[data-layout^="float"] #conHead {
+  background: var(--card-accent);
+  color: #fff;
+  border-radius: 11px 11px 0 0;
+  padding: 0 4px 0 12px;
+}
+#console[data-layout^="float"].folded #conHead { border-radius: 11px; }
+#console[data-layout^="float"] #conStatus,
+#console[data-layout^="float"] #conStatus[data-kind] { color: #fff; }
+#console[data-layout^="float"] #conStatus i { background: #ffffff8c; }
+#console[data-layout^="float"] #conStatus[data-kind="run"] i,
+#console[data-layout^="float"] #conStatus[data-kind="ok"] i { background: #7dffa8; }
+#console[data-layout^="float"] #conStatus[data-kind="err"] i { background: #ffb4b4; }
+#console[data-layout^="float"] #conTime { color: #ffffffb3; }
+#console[data-layout^="float"] button.icon { color: #ffffffd0; }
+#console[data-layout^="float"] button.icon:hover { background: #ffffff26; color: #fff; }
+#console[data-layout^="float"] .pill { background: #ffffff26; color: #fff; }
+#console[data-layout^="float"] .pill:hover:not(:disabled) { background: #ffffff40; }
+#console[data-layout^="float"] #conResize { top: -6px; }
+#console[data-layout^="float"] #conBody { padding: 4px 12px 10px; border-radius: 0 0 12px 12px; }
+#console[data-layout^="float"] #conOut { font-size: 12.5px; }
+#console.testing { --card-accent: #2F7FDB; }
+
+/* ---------- console header extras ---------- */
+.pill {
+  height: 24px;
+  padding: 0 10px 0 8px;
+  gap: 6px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  background: color-mix(in srgb, var(--fg) 9%, transparent);
+  color: var(--fg);
+}
+.pill:hover:not(:disabled) { background: color-mix(in srgb, var(--fg) 16%, transparent); }
+.pill svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+
+.layoutWrap { position: relative; display: flex; }
+#layoutMenu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  z-index: 100;
+  min-width: 200px;
+  padding: 5px;
+  display: grid;
+  gap: 2px;
+  background: var(--vscode-menu-background, var(--vscode-editorWidget-background, var(--panel)));
+  color: var(--vscode-menu-foreground, var(--fg));
+  border: 1px solid var(--vscode-menu-border, var(--line));
+  border-radius: 10px;
+  box-shadow: 0 12px 32px #0006;
+}
+#layoutMenu[hidden] { display: none; }
+#layoutMenu button {
+  justify-content: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: inherit;
+  background: transparent;
+  white-space: nowrap;
+}
+#layoutMenu button:hover { background: var(--vscode-menu-selectionBackground, color-mix(in srgb, var(--fg) 12%, transparent)); color: var(--vscode-menu-selectionForeground, inherit); }
+#layoutMenu button[aria-checked="true"] { background: color-mix(in srgb, #8A63E8 28%, transparent); }
+#layoutMenu svg { width: 20px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.2; opacity: 0.9; }
+#layoutMenu svg .fill { fill: #8A63E8; stroke: #8A63E8; }

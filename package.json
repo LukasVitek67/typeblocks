@@ -1,0 +1,181 @@
+{
+  "name": "typeblocks",
+  "displayName": "TypeBlocks - see TypeScript as Scratch-style blocks",
+  "description": "Open any .ts file as colorful drag-and-drop blocks, edit it there, and it is saved back as normal TypeScript.",
+  "version": "0.4.0",
+  "publisher": "lukas-vitek",
+  "license": "MIT",
+  "icon": "media/icon.png",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Education",
+    "Visualization"
+  ],
+  "keywords": [
+    "blocks",
+    "scratch",
+    "blockly",
+    "typescript",
+    "education",
+    "visual programming"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "typeblocks.editor",
+        "displayName": "TypeBlocks (blocks view)",
+        "selector": [
+          {
+            "filenamePattern": "*.ts"
+          }
+        ],
+        "priority": "option"
+      }
+    ],
+    "commands": [
+      {
+        "command": "typeblocks.openBlocks",
+        "title": "Open as Blocks",
+        "category": "TypeBlocks",
+        "icon": {
+          "light": "media/blocks-light.svg",
+          "dark": "media/blocks-dark.svg"
+        }
+      },
+      {
+        "command": "typeblocks.openCode",
+        "title": "Back to Code",
+        "category": "TypeBlocks",
+        "icon": "$(code)"
+      },
+      {
+        "command": "typeblocks.new",
+        "title": "New Block Program",
+        "category": "TypeBlocks"
+      },
+      {
+        "command": "typeblocks.run",
+        "title": "Run Program",
+        "category": "TypeBlocks",
+        "icon": "$(play)"
+      },
+      {
+        "command": "typeblocks.stop",
+        "title": "Stop Program",
+        "category": "TypeBlocks",
+        "icon": "$(debug-stop)"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "typeblocks.openBlocks",
+          "when": "resourceLangId == typescript && activeEditor == workbench.editors.files.textFileEditor",
+          "group": "navigation@-10"
+        },
+        {
+          "command": "typeblocks.run",
+          "when": "activeCustomEditorId == typeblocks.editor",
+          "group": "navigation@1"
+        },
+        {
+          "command": "typeblocks.openCode",
+          "when": "activeCustomEditorId == typeblocks.editor",
+          "group": "navigation@2"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "typeblocks.openBlocks",
+          "when": "resourceLangId == typescript"
+        },
+        {
+          "command": "typeblocks.openCode",
+          "when": "activeCustomEditorId == typeblocks.editor"
+        },
+        {
+          "command": "typeblocks.run",
+          "when": "activeCustomEditorId == typeblocks.editor"
+        },
+        {
+          "command": "typeblocks.stop",
+          "when": "activeCustomEditorId == typeblocks.editor"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "typeblocks.openBlocks",
+          "when": "resourceExtname == .ts",
+          "group": "navigation@9"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "typeblocks.openBlocks",
+          "when": "resourceLangId == typescript",
+          "group": "navigation@99"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "TypeBlocks",
+      "properties": {
+        "typeblocks.openTsBeside": {
+          "type": "boolean",
+          "default": true,
+          "description": "Also show the TypeScript code next to the blocks."
+        },
+        "typeblocks.colorStripes": {
+          "type": "boolean",
+          "default": true,
+          "description": "Color each line of the code with the color of the block that made it."
+        },
+        "typeblocks.nodePath": {
+          "type": "string",
+          "default": "",
+          "description": "Node.js executable used by Run. Empty = use the Node runtime built into VS Code."
+        },
+        "typeblocks.runIn": {
+          "type": "string",
+          "enum": [
+            "panel",
+            "terminal"
+          ],
+          "enumDescriptions": [
+            "The console at the bottom of the blocks editor",
+            "A VS Code terminal"
+          ],
+          "default": "panel",
+          "description": "Where Run shows the program output."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node tools/build.mjs",
+    "watch": "node tools/build.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "node tools/test-roundtrip.mjs",
+    "package": "node tools/build.mjs --minify && vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.25",
+    "@types/vscode": "~1.90.0",
+    "@vscode/vsce": "^3.7.1",
+    "blockly": "^13.4.0",
+    "esbuild": "^0.24.2",
+    "typescript": "^5.6.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LukasVitek67/typeblocks.git"
+  },
+  "homepage": "https://github.com/LukasVitek67/typeblocks#readme",
+  "bugs": {
+    "url": "https://github.com/LukasVitek67/typeblocks/issues"
+  }
+}

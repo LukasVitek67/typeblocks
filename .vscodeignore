@@ -1,0 +1,13 @@
+src/**
+tools/**
+preview/**
+.test-tmp/**
+node_modules/**
+**/*.map
+tsconfig.json
+*.vsix
+examples/**
+docs/**
+install.ps1
+install.sh
+.gitignore

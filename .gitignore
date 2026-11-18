@@ -1,0 +1,10 @@
+node_modules/
+dist/
+media/webview.js
+media/webview.js.map
+media/blockly/
+media/icon.png
+preview/
+.test-tmp/
+*.vsix
+.impeccable/
