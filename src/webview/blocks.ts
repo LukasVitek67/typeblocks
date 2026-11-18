@@ -1,4 +1,6 @@
 import * as Blockly from 'blockly';
+import * as csLocale from 'blockly/msg/cs';
+import { getLang, tr } from '../i18n';
 
 /** Category palette. Vivid enough for white text, distinct from each other. */
 export const COLORS = {
@@ -112,8 +114,25 @@ const LISTVAR = { type: 'field_variable', name: 'LIST', variable: null };
 
 // ------------------------------------------------------------------ JSON blocks
 
+/** Translate texts, tooltips and dropdown labels of JSON block definitions. */
+function localize(defs: Record<string, unknown>[]): Record<string, unknown>[] {
+  return defs.map((d) => {
+    const o: Record<string, unknown> = { ...d };
+    for (const k of Object.keys(o)) {
+      if (/^message\d+$/.test(k) || k === 'tooltip') o[k] = tr(o[k] as string);
+      if (/^args\d+$/.test(k)) {
+        o[k] = (o[k] as Record<string, unknown>[]).map((a) =>
+          a.type === 'field_dropdown' ? { ...a, options: (a.options as [string, string][]).map(([label, value]) => [tr(label), value]) } : a,
+        );
+      }
+    }
+    return o;
+  });
+}
+
 export function defineBlocks(): void {
-  Blockly.common.defineBlocksWithJsonArray([
+  if (getLang() === 'cs') Blockly.setLocale(((csLocale as unknown as { default?: object }).default ?? csLocale) as Record<string, string>);
+  Blockly.common.defineBlocksWithJsonArray(localize([
     // ---- Events ----
     {
       type: 'ts_on_start',
@@ -338,6 +357,19 @@ export function defineBlocks(): void {
       output: 'Boolean',
       style: 'text_blocks',
       tooltip: 'value.includes(part) - works for text and arrays.',
+    },
+    {
+      type: 'ts_starts',
+      message0: '%1 %2 %3 ?',
+      args0: [
+        { type: 'input_value', name: 'TEXT' },
+        { type: 'field_dropdown', name: 'HOW', options: [['starts with', 'startsWith'], ['ends with', 'endsWith']] },
+        { type: 'input_value', name: 'PART' },
+      ],
+      inputsInline: true,
+      output: 'Boolean',
+      style: 'text_blocks',
+      tooltip: 'text.startsWith(part) / text.endsWith(part) - does the text begin / end with it?',
     },
     {
       type: 'ts_length',
@@ -661,7 +693,7 @@ export function defineBlocks(): void {
       style: 'code_blocks',
       tooltip: 'Any TypeScript value, written by hand.',
     },
-  ]);
+  ]));
 
   defineListLiteral();
   defineObjectLiteral();
@@ -680,20 +712,20 @@ export function defineBlocks(): void {
   }
 
   const M = Blockly.Msg as Record<string, string>;
-  M['PROCEDURES_DEFNORETURN_TITLE'] = 'function';
-  M['PROCEDURES_DEFRETURN_TITLE'] = 'function';
-  M['PROCEDURES_DEFNORETURN_PROCEDURE'] = 'doSomething';
-  M['PROCEDURES_DEFRETURN_PROCEDURE'] = 'calculate';
-  M['PROCEDURES_DEFRETURN_RETURN'] = 'return';
+  M['PROCEDURES_DEFNORETURN_TITLE'] = tr('function');
+  M['PROCEDURES_DEFRETURN_TITLE'] = tr('function');
+  M['PROCEDURES_DEFNORETURN_PROCEDURE'] = tr('doSomething');
+  M['PROCEDURES_DEFRETURN_PROCEDURE'] = tr('calculate');
+  M['PROCEDURES_DEFRETURN_RETURN'] = tr('return');
   // no automatic "Describe this function..." comment (it would end up in the code)
-  M['PROCEDURES_DEFNORETURN_COMMENT'] = '';
-  M['PROCEDURES_DEFRETURN_COMMENT'] = '';
-  M['PROCEDURES_BEFORE_PARAMS'] = 'with:';
-  M['PROCEDURES_CALL_BEFORE_PARAMS'] = 'with:';
-  M['CONTROLS_WHILEUNTIL_OPERATOR_WHILE'] = 'repeat while';
-  M['CONTROLS_WHILEUNTIL_OPERATOR_UNTIL'] = 'repeat until';
-  M['VARIABLES_SET'] = 'set %1 to %2';
-  M['MATH_CHANGE_TITLE'] = 'change %1 by %2';
+  M['PROCEDURES_DEFNORETURN_COMMENT'] = tr('');
+  M['PROCEDURES_DEFRETURN_COMMENT'] = tr('');
+  M['PROCEDURES_BEFORE_PARAMS'] = tr('with:');
+  M['PROCEDURES_CALL_BEFORE_PARAMS'] = tr('with:');
+  M['CONTROLS_WHILEUNTIL_OPERATOR_WHILE'] = tr('repeat while');
+  M['CONTROLS_WHILEUNTIL_OPERATOR_UNTIL'] = tr('repeat until');
+  M['VARIABLES_SET'] = tr('set %1 to %2');
+  M['MATH_CHANGE_TITLE'] = tr('change %1 by %2');
 }
 
 /** [ 0:(a) 1:(b) 2:(c) ] (+)(-) - an array literal with visible indexes. */
@@ -706,7 +738,7 @@ function defineListLiteral(): void {
       this.setOutputShape(SQUARE);
       this.setStyle('list_blocks');
       this.setInputsInline(true);
-      this.setTooltip('An array: a numbered row of values. The first one is index 0. Use + and - to add or remove slots.');
+      this.setTooltip(tr('An array: a numbered row of values. The first one is index 0. Use + and - to add or remove slots.'));
       this.appendDummyInput('HEAD').appendField('[');
       this.updateShape();
     },
@@ -775,7 +807,7 @@ function defineObjectLiteral(): void {
       this.count = 2;
       this.setOutput(true, null);
       this.setStyle('type_blocks');
-      this.setTooltip('An object: named values that belong together, e.g. an order with an item name, a count and a price.');
+      this.setTooltip(tr('An object: named values that belong together, e.g. an order with an item name, a count and a price.'));
       this.appendDummyInput('HEAD').appendField('{');
       this.updateShape();
     },
@@ -826,7 +858,7 @@ function defineTypeShape(): void {
       this.setPreviousStatement(true);
       this.setNextStatement(true);
       this.setStyle('type_blocks');
-      this.setTooltip('Describes what an object looks like: which properties it has and what type each one is. TypeScript then checks you use it right.');
+      this.setTooltip(tr('Describes what an object looks like: which properties it has and what type each one is. TypeScript then checks you use it right.'));
       this.updateShape();
     },
     saveExtraState(this: TypeBlock) {
@@ -845,7 +877,7 @@ function defineTypeShape(): void {
       this.appendDummyInput('HEAD')
         .appendField(`${this.exported ? 'export ' : ''}${this.kind}`)
         .appendField(new Blockly.FieldTextInput(keep.get('NAME') ?? 'Thing'), 'NAME')
-        .appendField(this.kind === 'type' ? 'has:' : 'has:');
+        .appendField(tr('has:'));
       for (let k = 0; k < this.count; k++) {
         this.appendDummyInput('R' + k)
           .appendField('   ')
@@ -878,7 +910,7 @@ function defineRawStatement(): void {
       this.setPreviousStatement(true);
       this.setNextStatement(true);
       this.setStyle('code_blocks');
-      this.setTooltip('TypeScript written as text. Click the pencil to edit it.');
+      this.setTooltip(tr('TypeScript written as text. Click the pencil to edit it.'));
       this.updateShape();
     },
     saveExtraState(this: RawBlock) {
@@ -913,7 +945,7 @@ export function buildToolbox(): Blockly.utils.toolbox.ToolboxDefinition {
     contents: [
       {
         kind: 'category',
-        name: 'Events',
+        name: tr('Events'),
         categorystyle: 'events',
         contents: [
           { kind: 'block', type: 'ts_on_start' },
@@ -922,7 +954,7 @@ export function buildToolbox(): Blockly.utils.toolbox.ToolboxDefinition {
       },
       {
         kind: 'category',
-        name: 'Control',
+        name: tr('Control'),
         categorystyle: 'control',
         contents: [
           { kind: 'block', type: 'ts_wait', inputs: { SECS: num(1) } },
@@ -938,7 +970,7 @@ export function buildToolbox(): Blockly.utils.toolbox.ToolboxDefinition {
       },
       {
         kind: 'category',
-        name: 'Console',
+        name: tr('Console'),
         categorystyle: 'console',
         contents: [
           { kind: 'block', type: 'ts_say', inputs: { TEXT: txt('Hello!') } },
@@ -950,7 +982,7 @@ export function buildToolbox(): Blockly.utils.toolbox.ToolboxDefinition {
       },
       {
         kind: 'category',
-        name: 'Operators',
+        name: tr('Operators'),
         categorystyle: 'operators',
         contents: [
           { kind: 'block', type: 'ts_arith', fields: { OP: '+' }, inputs: { A: num(1), B: num(1) } },
@@ -973,12 +1005,13 @@ export function buildToolbox(): Blockly.utils.toolbox.ToolboxDefinition {
       },
       {
         kind: 'category',
-        name: 'Text',
+        name: tr('Text'),
         categorystyle: 'text',
         contents: [
           { kind: 'block', type: 'text' },
           { kind: 'block', type: 'ts_arith', fields: { OP: '+' }, inputs: { A: txt('Hello, '), B: txt('world') } },
           { kind: 'block', type: 'ts_length', inputs: { VALUE: txt('apple') } },
+          { kind: 'block', type: 'ts_starts', inputs: { TEXT: txt('apple'), PART: txt('ap') } },
           { kind: 'block', type: 'ts_contains', inputs: { TEXT: txt('apple'), PART: txt('a') } },
           { kind: 'block', type: 'ts_case', inputs: { TEXT: txt('hello') } },
           { kind: 'block', type: 'ts_to_number', inputs: { VALUE: txt('42') } },
@@ -986,17 +1019,17 @@ export function buildToolbox(): Blockly.utils.toolbox.ToolboxDefinition {
           { kind: 'block', type: 'ts_list_split', inputs: { TEXT: txt('a,b,c'), SEP: txt(',') } },
         ],
       },
-      { kind: 'category', name: 'Variables', categorystyle: 'variables', custom: 'TS_VARIABLES' },
-      { kind: 'category', name: 'Arrays', categorystyle: 'lists', custom: 'TS_LISTS' },
-      { kind: 'category', name: 'Functions', categorystyle: 'functions', custom: 'TS_FUNCTIONS' },
+      { kind: 'category', name: tr('Variables'), categorystyle: 'variables', custom: 'TS_VARIABLES' },
+      { kind: 'category', name: tr('Arrays'), categorystyle: 'lists', custom: 'TS_LISTS' },
+      { kind: 'category', name: tr('Functions'), categorystyle: 'functions', custom: 'TS_FUNCTIONS' },
       {
         kind: 'category',
-        name: 'Objects',
+        name: tr('Objects'),
         categorystyle: 'types',
         contents: [
-          { kind: 'label', text: 'Describe what an object looks like:', 'web-class': 'tbHint' } as never,
+          { kind: 'label', text: tr('Describe what an object looks like:'), 'web-class': 'tbHint' } as never,
           { kind: 'block', type: 'ts_type', extraState: { count: 3, kind: 'type', exported: false }, fields: { NAME: 'Order', N0: 'item', T0: 'string', N1: 'count', T1: 'number', N2: 'paid', T2: 'boolean' } },
-          { kind: 'label', text: 'Make one:', 'web-class': 'tbHint' } as never,
+          { kind: 'label', text: tr('Make one:'), 'web-class': 'tbHint' } as never,
           {
             kind: 'block',
             type: 'ts_object',
@@ -1004,10 +1037,10 @@ export function buildToolbox(): Blockly.utils.toolbox.ToolboxDefinition {
             fields: { K0: 'item', K1: 'count', K2: 'paid' },
             inputs: { V0: txt('bread'), V1: num(2), V2: { block: { type: 'logic_boolean', fields: { BOOL: 'FALSE' } } } },
           },
-          { kind: 'label', text: 'Read or change a property:', 'web-class': 'tbHint' } as never,
+          { kind: 'label', text: tr('Read or change a property:'), 'web-class': 'tbHint' } as never,
           { kind: 'block', type: 'ts_prop', fields: { PROP: 'count' } },
           { kind: 'block', type: 'ts_prop_set', fields: { PROP: 'paid' }, inputs: { VALUE: { block: { type: 'logic_boolean', fields: { BOOL: 'TRUE' } } } } },
-          { kind: 'label', text: 'Types:', 'web-class': 'tbHint' } as never,
+          { kind: 'label', text: tr('Types:'), 'web-class': 'tbHint' } as never,
           { kind: 'block', type: 'ts_typeof', inputs: { VALUE: num(42) } },
           { kind: 'block', type: 'ts_is_type', inputs: { VALUE: txt('hi') } },
           { kind: 'block', type: 'ts_as' },
@@ -1015,7 +1048,7 @@ export function buildToolbox(): Blockly.utils.toolbox.ToolboxDefinition {
       },
       {
         kind: 'category',
-        name: 'Code',
+        name: tr('Code'),
         categorystyle: 'code',
         contents: [
           { kind: 'block', type: 'ts_code_stmt' },

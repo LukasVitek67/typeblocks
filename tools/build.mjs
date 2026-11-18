@@ -36,7 +36,7 @@ if (watch) {
 // ---- preview page (open in a browser, no VS Code needed) ----
 const page = await esbuild.build({
   stdin: {
-    contents: "export * from './src/page'; export * from './src/convert/tsToBlocks'; export * from './src/starter'; export * from './src/guide/content'; export * from './src/guide/page';",
+    contents: "export * from './src/page'; export * from './src/convert/tsToBlocks'; export * from './src/starter'; export * from './src/guide/content'; export * from './src/guide/content.en'; export * from './src/guide/page';",
     resolveDir: root,
     loader: 'ts',
   },
@@ -51,19 +51,30 @@ const pageFile = r('.test-tmp', 'page.cjs'); // inside the project, so `typescri
 fs.writeFileSync(pageFile, page.outputFiles[0].text);
 const mod = createRequire(import.meta.url)(pageFile);
 fs.mkdirSync(r('preview'), { recursive: true });
-fs.writeFileSync(r('preview/index.html'), mod.pageHtml({ css: '../media/editor.css', js: '../media/webview.js', blocklyMedia: '../media/blockly/', previewWorkspace: mod.tsToBlocks(process.env.PREVIEW_FILE ? fs.readFileSync(process.env.PREVIEW_FILE, 'utf8') : mod.STARTER_TS).workspace }));
+fs.writeFileSync(r('preview/index.html'), mod.pageHtml({ css: '../media/editor.css', js: '../media/webview.js', blocklyMedia: '../media/blockly/', lang: process.env.PREVIEW_LANG, previewWorkspace: mod.tsToBlocks(process.env.PREVIEW_FILE ? fs.readFileSync(process.env.PREVIEW_FILE, 'utf8') : mod.STARTER_TS).workspace }));
 
-// ---- guide: every example converted to blocks (media/guide-data.js) + a web copy in docs/guide ----
+// ---- guide: every example converted to blocks (media/guide-data.<lang>.js) + web copies in docs/guide ----
 const stamp = JSON.parse(fs.readFileSync(r('package.json'), 'utf8')).version + '-' + Date.now().toString(36);
-const workspaces = {};
-for (const s of mod.SECTIONS) if (s.code) workspaces[s.id] = mod.tsToBlocks(s.code).workspace;
-const guideData = `window.GUIDE_DATA = ${JSON.stringify({ sections: mod.SECTIONS, workspaces }).replace(/</g, '\\u003c')};\n`;
-fs.writeFileSync(r('media/guide-data.js'), guideData);
+const UI = {
+  cs: { tryTitle: 'Vyzkoušej si to', reset: 'Obnovit', resetTitle: 'Vrátit příklad do původní podoby', run: 'Spustit', output: 'Výstup', answer: 'napiš odpověď a stiskni Enter', tryPrefix: 'Zkus: ', why: 'Proč?' },
+  en: { tryTitle: 'Try it', reset: 'Reset', resetTitle: 'Back to the original example', run: 'Run', output: 'Output', answer: 'type an answer, then Enter', tryPrefix: 'Try: ', why: 'Why?' },
+};
+const SECTIONS = { cs: mod.SECTIONS_CS, en: mod.SECTIONS_EN };
+for (const lang of ['cs', 'en']) {
+  const workspaces = {};
+  for (const s of SECTIONS[lang]) if (s.code) workspaces[s.id] = mod.tsToBlocks(s.code).workspace;
+  const data = `window.GUIDE_DATA = ${JSON.stringify({ ui: UI[lang], sections: SECTIONS[lang], workspaces }).replace(/</g, '\\u003c')};\n`;
+  fs.writeFileSync(r('media', `guide-data.${lang}.js`), data);
+}
+for (const old of ['media/guide-data.js', 'docs/guide/guide-data.js']) fs.rmSync(r(old), { force: true });
 const docs = r('docs/guide');
 fs.mkdirSync(path.join(docs, 'blockly'), { recursive: true });
-for (const f of ['guide.js', 'guide-data.js', 'guide.css']) fs.copyFileSync(r('media', f), path.join(docs, f));
+fs.mkdirSync(path.join(docs, 'en'), { recursive: true });
+for (const f of ['guide.js', 'guide-data.cs.js', 'guide-data.en.js', 'guide.css']) fs.copyFileSync(r('media', f), path.join(docs, f));
 for (const f of fs.readdirSync(mediaDst)) fs.copyFileSync(path.join(mediaDst, f), path.join(docs, 'blockly', f));
-fs.writeFileSync(path.join(docs, 'index.html'), mod.guidePageHtml({ css: [`guide.css?v=${stamp}`], scripts: [`guide-data.js?v=${stamp}`, `guide.js?v=${stamp}`], blocklyMedia: 'blockly/' }));
+// Czech at /guide/, English at /guide/en/
+fs.writeFileSync(path.join(docs, 'index.html'), mod.guidePageHtml({ lang: 'cs', css: [`guide.css?v=${stamp}`], scripts: [`guide-data.cs.js?v=${stamp}`, `guide.js?v=${stamp}`], blocklyMedia: 'blockly/', alt: { href: 'en/', label: 'English' } }));
+fs.writeFileSync(path.join(docs, 'en', 'index.html'), mod.guidePageHtml({ lang: 'en', css: [`../guide.css?v=${stamp}`], scripts: [`../guide-data.en.js?v=${stamp}`, `../guide.js?v=${stamp}`], blocklyMedia: '../blockly/', alt: { href: '../', label: 'Česky' } }));
 
 function writeIcon(file, size) {
   const px = Buffer.alloc(size * size * 4);

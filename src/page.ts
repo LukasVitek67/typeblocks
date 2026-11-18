@@ -1,9 +1,12 @@
 /** Webview page markup. Shared by the extension and the browser preview (no vscode import here). */
-export function pageHtml(o: { csp?: string; nonce?: string; css: string; js: string; blocklyMedia: string; previewWorkspace?: object }): string {
+import { getLang, setLang, tr } from './i18n';
+
+export function pageHtml(o: { csp?: string; nonce?: string; css: string; js: string; blocklyMedia: string; previewWorkspace?: object; lang?: string }): string {
+  setLang(o.lang);
   const n = o.nonce ? ` nonce="${o.nonce}"` : '';
   const preview = o.previewWorkspace ? `window.PREVIEW_WORKSPACE = ${JSON.stringify(o.previewWorkspace).replace(/</g, '\\u003c')};` : '';
   return `<!doctype html>
-<html lang="en">
+<html lang="${getLang()}">
 <head>
 <meta charset="utf-8">
 ${o.csp ? `<meta http-equiv="Content-Security-Policy" content="${o.csp}">` : ''}
@@ -18,11 +21,12 @@ ${o.csp ? `<meta http-equiv="Content-Security-Policy" content="${o.csp}">` : ''}
     <b>TypeBlocks</b><span id="fileName" class="file">program.ts</span>
   </div>
   <div class="actions">
-    <button id="cleanUp" class="ghost" title="Tidy up block positions">Tidy</button>
-    <button id="showGuide" class="ghost help" title="Průvodce: jak co funguje (s příklady)" aria-label="Průvodce">?</button>
-    <button id="showCode" class="ghost" title="Back to the normal TypeScript editor"><i class="code">&lt;/&gt;</i>Code</button>
-    <button id="stop" class="stop" disabled title="Stop the program"><i class="sq"></i>Stop</button>
-    <button id="run" class="run" title="Run this file in the terminal"><i class="tri"></i><span>Run</span></button>
+    <button id="cleanUp" class="ghost" title="${tr('Tidy up block positions')}">${tr('Tidy')}</button>
+    <button id="langBtn" class="ghost lang" title="${tr('Switch language')}">${getLang() === 'cs' ? 'CZ' : 'EN'}</button>
+    <button id="showGuide" class="ghost help" title="${tr('Guide: how everything works (with examples)')}" aria-label="${tr('Guide')}">?</button>
+    <button id="showCode" class="ghost" title="${tr('Back to the normal TypeScript editor')}"><i class="code">&lt;/&gt;</i>${tr('Code')}</button>
+    <button id="stop" class="stop" disabled title="${tr('Stop the program')}"><i class="sq"></i>${tr('Stop')}</button>
+    <button id="run" class="run" title="${tr('Run this file in the terminal')}"><i class="tri"></i><span>${tr('Run')}</span></button>
   </div>
 </header>
 <div id="banner" hidden></div>
@@ -31,34 +35,34 @@ ${o.csp ? `<meta http-equiv="Content-Security-Policy" content="${o.csp}">` : ''}
     <main id="blockly"></main>
     <div id="floatStack">
       <aside id="arrays" hidden>
-        <button id="arraysToggle" class="arraysHead" title="Show / hide">Arrays at the start <span class="chev"></span></button>
+        <button id="arraysToggle" class="arraysHead" title="${tr('Show / hide')}">${tr('Arrays at the start')} <span class="chev"></span></button>
         <div id="arraysBody"></div>
       </aside>
     </div>
   </div>
 </div>
 <section id="console" class="folded" aria-label="Console">
-  <div id="conResize" title="Drag to resize"></div>
+  <div id="conResize" title="${tr('Drag to resize')}"></div>
   <div id="conHead">
-    <div id="conStatus" data-kind="idle"><i></i><span>Console</span></div>
+    <div id="conStatus" data-kind="idle"><i></i><span>${tr('Console')}</span></div>
     <span id="conTime"></span>
     <span class="grow"></span>
-    <button id="conTest" class="pill" title="Run the project's tests (npm test)"><svg viewBox="0 0 16 16"><path d="M6 2h4M6.8 2v4.2L3.4 12.3A1.2 1.2 0 0 0 4.5 14h7a1.2 1.2 0 0 0 1.1-1.7L9.2 6.2V2M5 10h6"/></svg><span>Test</span></button>
+    <button id="conTest" class="pill" title="${tr("Run the project's tests (npm test)")}"><svg viewBox="0 0 16 16"><path d="M6 2h4M6.8 2v4.2L3.4 12.3A1.2 1.2 0 0 0 4.5 14h7a1.2 1.2 0 0 0 1.1-1.7L9.2 6.2V2M5 10h6"/></svg><span>${tr('Test')}</span></button>
     <div class="layoutWrap">
-      <button id="conLayout" class="icon" title="Where the console sits" aria-haspopup="menu"><svg viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M2 9.5h12"/></svg></button>
+      <button id="conLayout" class="icon" title="${tr('Where the console sits')}" aria-haspopup="menu"><svg viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M2 9.5h12"/></svg></button>
       <div id="layoutMenu" role="menu" hidden>
-        <button role="menuitemradio" data-layout="bottom"><svg viewBox="0 0 20 16"><rect x="1.5" y="1.5" width="17" height="13" rx="2"/><rect x="1.5" y="10" width="17" height="4.5" class="fill"/></svg>Bottom, full width</button>
-        <button role="menuitemradio" data-layout="right"><svg viewBox="0 0 20 16"><rect x="1.5" y="1.5" width="17" height="13" rx="2"/><rect x="12.5" y="1.5" width="6" height="13" class="fill"/></svg>Right, full height</button>
-        <button role="menuitemradio" data-layout="float-above"><svg viewBox="0 0 20 16"><rect x="1.5" y="1.5" width="17" height="13" rx="2"/><rect x="11" y="4" width="6" height="4" rx="1" class="fill"/><rect x="11" y="9" width="6" height="3.5" rx="1"/></svg>Card, above Arrays</button>
-        <button role="menuitemradio" data-layout="float-below"><svg viewBox="0 0 20 16"><rect x="1.5" y="1.5" width="17" height="13" rx="2"/><rect x="11" y="3.5" width="6" height="3.5" rx="1"/><rect x="11" y="8" width="6" height="4.5" rx="1" class="fill"/></svg>Card, below Arrays</button>
+        <button role="menuitemradio" data-layout="bottom"><svg viewBox="0 0 20 16"><rect x="1.5" y="1.5" width="17" height="13" rx="2"/><rect x="1.5" y="10" width="17" height="4.5" class="fill"/></svg>${tr('Bottom, full width')}</button>
+        <button role="menuitemradio" data-layout="right"><svg viewBox="0 0 20 16"><rect x="1.5" y="1.5" width="17" height="13" rx="2"/><rect x="12.5" y="1.5" width="6" height="13" class="fill"/></svg>${tr('Right, full height')}</button>
+        <button role="menuitemradio" data-layout="float-above"><svg viewBox="0 0 20 16"><rect x="1.5" y="1.5" width="17" height="13" rx="2"/><rect x="11" y="4" width="6" height="4" rx="1" class="fill"/><rect x="11" y="9" width="6" height="3.5" rx="1"/></svg>${tr('Card, above Arrays')}</button>
+        <button role="menuitemradio" data-layout="float-below"><svg viewBox="0 0 20 16"><rect x="1.5" y="1.5" width="17" height="13" rx="2"/><rect x="11" y="3.5" width="6" height="3.5" rx="1"/><rect x="11" y="8" width="6" height="4.5" rx="1" class="fill"/></svg>${tr('Card, below Arrays')}</button>
       </div>
     </div>
-    <button id="conClear" class="icon" title="Clear"><svg viewBox="0 0 16 16"><path d="M3 4h10M6 4V2.5h4V4M4.5 4l.6 9.5h5.8l.6-9.5"/></svg></button>
-    <button id="conFold" class="icon" title="Show / hide"><svg viewBox="0 0 16 16"><path d="M4 10l4-4 4 4"/></svg></button>
+    <button id="conClear" class="icon" title="${tr('Clear')}"><svg viewBox="0 0 16 16"><path d="M3 4h10M6 4V2.5h4V4M4.5 4l.6 9.5h5.8l.6-9.5"/></svg></button>
+    <button id="conFold" class="icon" title="${tr('Show / hide')}"><svg viewBox="0 0 16 16"><path d="M4 10l4-4 4 4"/></svg></button>
   </div>
   <div id="conBody">
     <pre id="conOut"></pre>
-    <form id="conForm" autocomplete="off"><span class="caret">&rsaquo;</span><input id="conInput" spellcheck="false" placeholder="type an answer, then Enter" disabled></form>
+    <form id="conForm" autocomplete="off"><span class="caret">&rsaquo;</span><input id="conInput" spellcheck="false" placeholder="${tr('type an answer, then Enter')}" disabled></form>
   </div>
 </section>
 <div id="modal" hidden>
@@ -76,7 +80,7 @@ ${o.csp ? `<meta http-equiv="Content-Security-Policy" content="${o.csp}">` : ''}
     </div>
   </div>
 </div>
-<script${n}>window.BLOCKLY_MEDIA = ${JSON.stringify(o.blocklyMedia)};${preview}</script>
+<script${n}>window.TB_LANG = ${JSON.stringify(getLang())};window.BLOCKLY_MEDIA = ${JSON.stringify(o.blocklyMedia)};${preview}</script>
 <script${n} src="${o.js}"></script>
 </body>
 </html>`;

@@ -762,6 +762,7 @@ class Converter {
       const target = c.expression.expression;
       const method = c.expression.name.text;
       if ((method === 'toUpperCase' || method === 'toLowerCase') && !args.length) return this.block('ts_case', { fields: { CASE: method }, inputs: { TEXT: { block: this.expr(target) } } });
+      if ((method === 'startsWith' || method === 'endsWith') && args.length === 1) return this.block('ts_starts', { fields: { HOW: method }, inputs: { TEXT: { block: this.expr(target) }, PART: { block: this.expr(args[0]) } } });
       if (method === 'split' && args.length === 1) return this.block('ts_list_split', { inputs: { TEXT: { block: this.expr(target) }, SEP: { block: this.expr(args[0]) } } });
       const isArrayVar = ts.isIdentifier(target) && this.arrays.has(target.text);
       if (isArrayVar) {

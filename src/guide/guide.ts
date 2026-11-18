@@ -7,7 +7,19 @@ import { defineBlocks, makeTheme } from '../webview/blocks';
 import { generate, generateJs, LineSpan } from '../webview/generator';
 import type { Section } from './content';
 
+interface GuideUi {
+  tryTitle: string;
+  reset: string;
+  resetTitle: string;
+  run: string;
+  output: string;
+  answer: string;
+  tryPrefix: string;
+  why: string;
+}
+
 interface GuideData {
+  ui: GuideUi;
   sections: Section[];
   workspaces: Record<string, object>;
 }
@@ -69,7 +81,8 @@ for (const s of data.sections) {
   if (s.why) {
     const why = document.createElement('aside');
     why.className = 'why';
-    why.innerHTML = '<b>Proč?</b> <span></span>';
+    why.innerHTML = '<b></b> <span></span>';
+    why.querySelector('b')!.textContent = data.ui.why;
     why.querySelector('span')!.textContent = s.why;
     sec.appendChild(why);
   }
@@ -94,18 +107,18 @@ function exampleShell(s: Section): HTMLElement {
   box.className = 'example';
   box.innerHTML = `
     <div class="exHead">
-      <span class="exTitle">Vyzkoušej si to</span>
+      <span class="exTitle">${data.ui.tryTitle}</span>
       <span class="grow"></span>
-      <button class="ghost reset" title="Vrátit příklad do původní podoby">Obnovit</button>
-      ${s.run ? '<button class="run"><i class="tri"></i>Spustit</button>' : ''}
+      <button class="ghost reset" title="${data.ui.resetTitle}">${data.ui.reset}</button>
+      ${s.run ? `<button class="run"><i class="tri"></i>${data.ui.run}</button>` : ''}
     </div>
     <div class="exPanes">
       <div class="exBlocks"></div>
       <pre class="exCode"></pre>
     </div>
     ${s.tryIt ? '<div class="exTry"></div>' : ''}
-    <div class="exOut" hidden><div class="outHead">Výstup</div><pre class="outText"></pre><form class="outAsk" hidden><span class="caret">&rsaquo;</span><input placeholder="napiš odpověď a stiskni Enter"></form></div>`;
-  if (s.tryIt) box.querySelector('.exTry')!.textContent = 'Zkus: ' + s.tryIt;
+    <div class="exOut" hidden><div class="outHead">${data.ui.output}</div><pre class="outText"></pre><form class="outAsk" hidden><span class="caret">&rsaquo;</span><input placeholder="${data.ui.answer}"></form></div>`;
+  if (s.tryIt) box.querySelector('.exTry')!.textContent = data.ui.tryPrefix + s.tryIt;
   // inject Blockly only when the example scrolls into view (pages with many editors stay fast)
   const lazy = new IntersectionObserver((entries) => {
     if (entries.some((e) => e.isIntersecting)) {

@@ -4,6 +4,8 @@
  * full width at the bottom, full height on the right, or a card above / below the Arrays card.
  */
 
+import { tr, trf } from '../i18n';
+
 type Post = (msg: unknown) => void;
 export type Layout = 'bottom' | 'right' | 'float-above' | 'float-below';
 
@@ -182,7 +184,7 @@ export function initConsole(post: Post): ConsoleApi {
     if (out.childNodes.length) return;
     const e = document.createElement('div');
     e.className = 'conEmpty';
-    e.textContent = 'Press Run - what your program prints shows up here.';
+    e.textContent = tr('Press Run - what your program prints shows up here.');
     out.appendChild(e);
   }
   showEmpty();
@@ -272,17 +274,17 @@ export function initConsole(post: Post): ConsoleApi {
     },
     setTests(info) {
       testBtn.disabled = !info;
-      testBtn.title = info ? `Run the tests: ${info.label}` : 'No package.json with a "test" script found next to this file';
+      testBtn.title = info ? trf('Run the tests: {0}', info.label) : tr('No package.json with a "test" script found next to this file');
     },
     started(label = '') {
-      if (running) divider('restarted', 'stop');
+      if (running) divider(tr('restarted'), 'stop');
       running = true;
-      runLabel = label ? `Testing` : 'Running';
+      runLabel = label ? 'Testing' : 'Running';
       state = { fg: '', bold: false, dim: false };
       startedAt = Date.now();
       panel.classList.add('running');
       panel.classList.toggle('testing', !!label);
-      setStatus('run', runLabel);
+      setStatus('run', tr(runLabel));
       const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
       divider(label ? `${label}  ·  ${time}` : time, 'start');
       clearInterval(tick);
@@ -304,14 +306,14 @@ export function initConsole(post: Post): ConsoleApi {
       input.value = '';
       const what = runLabel === 'Testing' ? 'tests' : '';
       if (signal) {
-        setStatus('idle', 'Stopped');
-        divider(`stopped after ${fmt(ms)}`, 'stop');
+        setStatus('idle', tr('Stopped'));
+        divider(trf('stopped after {0}', fmt(ms)), 'stop');
       } else if (code === 0) {
-        setStatus('ok', what ? 'Tests passed' : 'Finished');
-        divider(what ? `tests passed in ${fmt(ms)}` : `finished in ${fmt(ms)}`, 'ok');
+        setStatus('ok', tr(what ? 'Tests passed' : 'Finished'));
+        divider(trf(what ? 'tests passed in {0}' : 'finished in {0}', fmt(ms)), 'ok');
       } else {
-        setStatus('err', what ? 'Tests failed' : 'Error');
-        divider(what ? `tests failed (exit ${code}) after ${fmt(ms)}` : `ended with error ${code} after ${fmt(ms)}`, 'err');
+        setStatus('err', tr(what ? 'Tests failed' : 'Error'));
+        divider(what ? trf('tests failed (exit {0}) after {1}', code ?? '?', fmt(ms)) : trf('ended with error {0} after {1}', code ?? '?', fmt(ms)), 'err');
       }
     },
   };

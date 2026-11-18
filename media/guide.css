@@ -194,3 +194,7 @@ body.guide {
 
 /* raw code blocks in guide examples */
 .example .blocklyText.tbCode { font-family: var(--mono) !important; font-weight: 500 !important; }
+
+.gLinks { display: flex; align-items: center; gap: 16px; }
+.langLink { color: var(--accent); text-decoration: none; font-size: 13px; font-weight: 600; padding: 3px 10px; border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); border-radius: 999px; }
+.langLink:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); }

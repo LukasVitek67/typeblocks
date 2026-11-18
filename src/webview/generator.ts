@@ -356,6 +356,7 @@ const OVERRIDES: Record<string, ReturnType<typeof G>> = {
 
   // ---------- Text ----------
   ts_contains: G((block, g) => [`${val(g, block, 'TEXT', Order.MEMBER, '""')}.includes(${val(g, block, 'PART', Order.NONE, '""')})`, Order.FUNCTION_CALL]),
+  ts_starts: G((block, g) => [`${val(g, block, 'TEXT', Order.MEMBER, '""')}.${block.getFieldValue('HOW')}(${val(g, block, 'PART', Order.NONE, '""')})`, Order.FUNCTION_CALL]),
   ts_length: G((block, g) => [`${val(g, block, 'VALUE', Order.MEMBER, '""')}.length`, Order.MEMBER]),
   ts_to_number: G((block, g) => [`Number(${val(g, block, 'VALUE', Order.NONE, '0')})`, Order.FUNCTION_CALL]),
   ts_to_text: G((block, g) => [`String(${val(g, block, 'VALUE', Order.NONE, '""')})`, Order.FUNCTION_CALL]),

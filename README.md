@@ -5,7 +5,7 @@ No extra files: the blocks are just another view of your `.ts` file, and every c
 
 ![TypeBlocks: blocks on the left, the same file as normal code on the right](docs/screenshot.png)
 
-**📘 [Průvodce / Guide (Czech) - how every block works, with live examples you can run](https://lukasvitek67.github.io/typeblocks/guide/)** - also inside VS Code: the **?** button in the blocks editor.
+**📘 Guide: [English](https://lukasvitek67.github.io/typeblocks/guide/en/) · [Česky](https://lukasvitek67.github.io/typeblocks/guide/)** - how every block works, with live examples you can run. Also inside VS Code: the **?** button in the blocks editor.
 
 ## Install (one line)
 
@@ -60,12 +60,22 @@ Classes, imports, template strings, ... are shown as grey **TS code** blocks wit
 
 The file keeps its own style: indentation (2 or 4 spaces, tabs), quote style, comments, blank lines and how method chains are split. Parts that became blocks always end with `;`.
 
+## Languages
+
+Blocks, console, dialogs and the guide come in **English and Czech**. By default TypeBlocks follows the VS Code display language; the **EN / CZ** button in the blocks editor switches it (setting `typeblocks.language`). The code is always plain TypeScript.
+
+## Updates
+
+TypeBlocks updates itself from GitHub Releases: it checks at start-up (at most every 6 hours), downloads the new `.vsix`, **verifies its SHA-256 checksum** against the one GitHub published, installs it and asks you to reload. If a release has no checksum, nothing is installed automatically. Change this with `typeblocks.autoUpdate` (`auto` / `ask` / `off`) or run **TypeBlocks: Check for Updates**.
+
 ## Settings
 
 | Setting | Default | |
 |---|---|---|
 | `typeblocks.openTsBeside` | `true` | also show the code next to the blocks |
 | `typeblocks.colorStripes` | `true` | color each code line like the block that made it |
+| `typeblocks.language` | `auto` | `auto` (follow VS Code) / `cs` / `en` |
+| `typeblocks.autoUpdate` | `auto` | `auto` = install new versions by itself, `ask` = ask first, `off` |
 | `typeblocks.runIn` | `panel` | `panel` = built-in console, `terminal` = a VS Code terminal |
 | `typeblocks.nodePath` | `""` | use your own `node` for Run |
 
@@ -74,7 +84,7 @@ The file keeps its own style: indentation (2 or 4 spaces, tabs), quote style, co
 ```bash
 npm install
 npm run build      # bundles + browser preview (preview/index.html)
-npm test           # TS -> blocks -> TS round trips: stable, tsc --strict, runs
+npm test           # round trips (stable, tsc --strict, runs), updater, guide examples, translations
 npm run package    # -> typeblocks-x.y.z.vsix
 ```
 

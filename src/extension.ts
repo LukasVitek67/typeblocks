@@ -8,6 +8,7 @@ import { pageHtml } from './page';
 import { tsToBlocks } from './convert/tsToBlocks';
 import { STARTER_TS } from './starter';
 import { guidePageHtml } from './guide/page';
+import { activateUpdater } from './updater';
 
 const VIEW_TYPE = 'typeblocks.editor';
 
@@ -35,6 +36,7 @@ export function activate(ctx: vscode.ExtensionContext): void {
     vscode.window.onDidChangeVisibleTextEditors(() => provider.redecorateAll()),
     vscode.window.onDidCloseTerminal((t) => provider.onTerminalClosed(t)),
   );
+  activateUpdater(ctx, currentLang);
 }
 
 export function deactivate(): void {}
@@ -78,8 +80,20 @@ function openGuide(ctx: vscode.ExtensionContext): void {
   const nonce = [...Array(24)].map(() => Math.random().toString(36)[2]).join('');
   // 'unsafe-eval': the "Spustit" buttons run the examples inside the page
   const csp = [`default-src 'none'`, `img-src ${w.cspSource} data:`, `style-src ${w.cspSource} 'unsafe-inline'`, `font-src ${w.cspSource}`, `script-src 'nonce-${nonce}' 'unsafe-eval'`].join('; ');
-  w.html = guidePageHtml({ csp, nonce, css: [u('guide.css')], scripts: [u('guide-data.js'), u('guide.js')], blocklyMedia: u('blockly') + '/' });
-  guidePanel.onDidDispose(() => (guidePanel = undefined));
+  const lang = currentLang();
+  w.html = guidePageHtml({ csp, nonce, lang, css: [u('guide.css')], scripts: [u(`guide-data.${lang}.js`), u('guide.js')], blocklyMedia: u('blockly') + '/' });
+  guidePanel.title = lang === 'cs' ? 'TypeBlocks - průvodce' : 'TypeBlocks - guide';
+  const sub = vscode.workspace.onDidChangeConfiguration((e) => {
+    if (e.affectsConfiguration('typeblocks.language') && guidePanel) {
+      const l = currentLang();
+      guidePanel.title = l === 'cs' ? 'TypeBlocks - průvodce' : 'TypeBlocks - guide';
+      w.html = guidePageHtml({ csp, nonce, lang: l, css: [u('guide.css')], scripts: [u(`guide-data.${l}.js`), u('guide.js')], blocklyMedia: u('blockly') + '/' });
+    }
+  });
+  guidePanel.onDidDispose(() => {
+    sub.dispose();
+    guidePanel = undefined;
+  });
 }
 
 async function newProgram(): Promise<void> {
@@ -104,6 +118,13 @@ function hasNodeTypes(file: vscode.Uri): boolean {
     if (fs.existsSync(path.join(d, 'node_modules', '@types', 'node', 'package.json'))) return true;
     if (!stop || path.relative(stop, d) === '' || path.dirname(d) === d) return false;
   }
+}
+
+/** 'cs' or 'en': setting typeblocks.language, "auto" follows the VS Code display language. */
+function currentLang(): 'cs' | 'en' {
+  const v = vscode.workspace.getConfiguration('typeblocks').get<string>('language', 'auto');
+  if (v === 'cs' || v === 'en') return v;
+  return vscode.env.language.toLowerCase().startsWith('cs') ? 'cs' : 'en';
 }
 
 /** The nearest package.json (up to the workspace folder) that has a "test" script. */
@@ -186,6 +207,11 @@ class Session {
 
     this.subs.push(
       panel.webview.onDidReceiveMessage((m) => this.onMessage(m)),
+      vscode.workspace.onDidChangeConfiguration((e) => {
+        if (e.affectsConfiguration('typeblocks.language')) {
+          this.panel.webview.html = this.html(this.panel.webview, vscode.Uri.joinPath(this.provider.ctx.extensionUri, 'media'));
+        }
+      }),
       vscode.workspace.onDidChangeTextDocument((e) => {
         if (e.document !== doc || !e.contentChanges.length) return;
         if (doc.getText() !== this.lastWebviewText) this.sendLoad(false);
@@ -263,6 +289,9 @@ class Session {
         break;
       case 'stdin':
         this.runner?.write((m as { text?: string }).text ?? '');
+        break;
+      case 'setLang':
+        await vscode.workspace.getConfiguration('typeblocks').update('language', (m as { lang?: string }).lang === 'cs' ? 'cs' : 'en', vscode.ConfigurationTarget.Global);
         break;
       case 'guide':
         void vscode.commands.executeCommand('typeblocks.guide');
@@ -425,7 +454,7 @@ class Session {
       `font-src ${webview.cspSource}`,
       `script-src 'nonce-${nonce}'`,
     ].join('; ');
-    return pageHtml({ csp, nonce, css: u('editor.css'), js: u('webview.js'), blocklyMedia: u('blockly') + '/' });
+    return pageHtml({ csp, nonce, css: u('editor.css'), js: u('webview.js'), blocklyMedia: u('blockly') + '/', lang: currentLang() });
   }
 }
 

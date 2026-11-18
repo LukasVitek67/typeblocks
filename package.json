@@ -2,7 +2,7 @@
   "name": "typeblocks",
   "displayName": "TypeBlocks - see TypeScript as Scratch-style blocks",
   "description": "Open any .ts file as colorful drag-and-drop blocks, edit it there, and it is saved back as normal TypeScript.",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "publisher": "lukas-vitek",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -74,6 +74,11 @@
         "title": "Open Guide (Průvodce)",
         "category": "TypeBlocks",
         "icon": "$(question)"
+      },
+      {
+        "command": "typeblocks.checkUpdate",
+        "title": "Check for Updates",
+        "category": "TypeBlocks"
       }
     ],
     "menus": {
@@ -162,6 +167,36 @@
           ],
           "default": "panel",
           "description": "Where Run shows the program output."
+        },
+        "typeblocks.language": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "cs",
+            "en"
+          ],
+          "enumDescriptions": [
+            "Follow the VS Code display language",
+            "Česky",
+            "English"
+          ],
+          "default": "auto",
+          "description": "Language of the blocks, the console and the guide. / Jazyk bloků, konzole a průvodce."
+        },
+        "typeblocks.autoUpdate": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "ask",
+            "off"
+          ],
+          "enumDescriptions": [
+            "Download and install new versions from GitHub by itself (checksum is verified)",
+            "Tell me, install only when I click Update",
+            "Never check"
+          ],
+          "default": "auto",
+          "description": "Updates of TypeBlocks from GitHub Releases. / Aktualizace TypeBlocks z GitHub Releases."
         }
       }
     }
@@ -170,7 +205,7 @@
     "build": "node tools/build.mjs",
     "watch": "node tools/build.mjs --watch",
     "typecheck": "tsc --noEmit",
-    "test": "node tools/test-roundtrip.mjs",
+    "test": "node tools/test-roundtrip.mjs && node tools/test-updater.mjs && node tools/check-i18n.mjs",
     "package": "node tools/build.mjs --minify && vsce package --no-dependencies"
   },
   "devDependencies": {

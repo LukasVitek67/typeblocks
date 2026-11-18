@@ -2,6 +2,7 @@ import * as Blockly from 'blockly';
 import { buildToolbox, defineBlocks, hooks, ITEM_TYPES, makeTheme, VAR_TYPES } from './blocks';
 import { generate, meta, setMeta } from './generator';
 import { initConsole } from './console';
+import { getLang, tr, trf } from '../i18n';
 
 interface VsApi {
   postMessage(msg: unknown): void;
@@ -98,6 +99,7 @@ function openDialog(opts: {
     typeRow.appendChild(b);
   }
   ok.textContent = opts.okText ?? 'OK';
+  cancel.textContent = tr('Cancel');
   cancel.hidden = opts.cancel === false;
   danger.hidden = !opts.danger;
   danger.textContent = opts.danger ?? '';
@@ -145,7 +147,7 @@ Blockly.dialog.setAlert((message, cb) => {
 hooks.editCode = (block) => {
   if (block.isInFlyout) return;
   const b = block as Blockly.Block & { code: string; updateShape(): void };
-  void openDialog({ title: 'Edit TypeScript', code: b.code, okText: 'Save', message: 'Ctrl+Enter saves.' }).then((r) => {
+  void openDialog({ title: tr('Edit TypeScript'), code: b.code, okText: tr('Save'), message: tr('Ctrl+Enter saves.') }).then((r) => {
     if (!r) return;
     const before = JSON.stringify({ code: b.code });
     b.code = r.code.replace(/\s+$/, '');
@@ -179,20 +181,20 @@ function isArrayVar(ws: Blockly.Workspace, id: string): boolean {
 
 async function makeVariable(ws: Blockly.WorkspaceSvg, array: boolean) {
   const r = await openDialog({
-    title: array ? 'New array' : 'New variable',
-    message: array ? 'What will the array hold? (an array of strings is written string[])' : 'What kind of value will it hold?',
+    title: tr(array ? 'New array' : 'New variable'),
+    message: tr(array ? 'What will the array hold? (an array of strings is written string[])' : 'What kind of value will it hold?'),
     input: '',
     types: array ? ITEM_TYPES : VAR_TYPES,
-    okText: 'Create',
+    okText: tr('Create'),
   });
   if (!r || !r.name) return;
   const name = r.name.replace(/\s+(\w)/g, (_, c: string) => c.toUpperCase());
   if (!IDENT.test(name)) {
-    await openDialog({ title: `"${r.name}" can't be a name`, message: 'Use letters, digits and _ (no spaces, not starting with a digit).', cancel: false });
+    await openDialog({ title: trf('"{0}" can\'t be a name', r.name), message: tr('Use letters, digits and _ (no spaces, not starting with a digit).'), cancel: false });
     return;
   }
   if (Blockly.Variables.nameUsedWithAnyType(name, ws)) {
-    await openDialog({ title: `"${name}" already exists.`, cancel: false });
+    await openDialog({ title: trf('"{0}" already exists.', name), cancel: false });
     return;
   }
   const v = ws.getVariableMap().createVariable(name);
@@ -214,15 +216,15 @@ function sortedVars(ws: Blockly.Workspace) {
 }
 
 function variablesFlyout(ws: Blockly.WorkspaceSvg): Blockly.utils.toolbox.FlyoutItemInfoArray {
-  const items: object[] = [{ kind: 'button', text: '+ Make a variable', callbackKey: 'TS_NEW_VAR' }];
+  const items: object[] = [{ kind: 'button', text: tr('+ Make a variable'), callbackKey: 'TS_NEW_VAR' }];
   const vars = sortedVars(ws).filter((v) => !isArrayVar(ws, v.getId()));
   if (vars.length) {
-    items.push({ kind: 'label', text: 'Create it (once):', 'web-class': 'tbHint' });
+    items.push({ kind: 'label', text: tr('Create it (once):'), 'web-class': 'tbHint' });
     for (const v of vars) {
       const t = typeOf(ws, v.getId());
       items.push({ kind: 'block', type: 'ts_let', fields: { KIND: 'let', VAR: { id: v.getId() }, TYPE: t }, inputs: clean({ VALUE: defaultFor(t) }) });
     }
-    items.push({ kind: 'label', text: 'Use it:', 'web-class': 'tbHint' });
+    items.push({ kind: 'label', text: tr('Use it:'), 'web-class': 'tbHint' });
     for (const v of vars) items.push({ kind: 'block', type: 'variables_get', fields: { VAR: { id: v.getId() } } });
     const first = vars[0];
     items.push({ kind: 'sep', gap: 16 });
@@ -233,15 +235,15 @@ function variablesFlyout(ws: Blockly.WorkspaceSvg): Blockly.utils.toolbox.Flyout
 }
 
 function listsFlyout(ws: Blockly.WorkspaceSvg): Blockly.utils.toolbox.FlyoutItemInfoArray {
-  const items: object[] = [{ kind: 'button', text: '+ Make an array', callbackKey: 'TS_NEW_LIST' }];
+  const items: object[] = [{ kind: 'button', text: tr('+ Make an array'), callbackKey: 'TS_NEW_LIST' }];
   const lists = sortedVars(ws).filter((v) => isArrayVar(ws, v.getId()));
-  items.push({ kind: 'label', text: 'An array is a numbered row of values. The first one is number 0.', 'web-class': 'tbHint' });
+  items.push({ kind: 'label', text: tr('An array is a numbered row of values. The first one is number 0.'), 'web-class': 'tbHint' });
   if (!lists.length) {
     items.push({ kind: 'block', type: 'ts_list_literal', extraState: { itemCount: 3 }, inputs: { ITEM0: txt('apple'), ITEM1: txt('banana'), ITEM2: txt('cherry') } });
     return items as Blockly.utils.toolbox.FlyoutItemInfoArray;
   }
   const L = { LIST: { id: lists[0].getId() } };
-  items.push({ kind: 'label', text: 'Create it (once):', 'web-class': 'tbHint' });
+  items.push({ kind: 'label', text: tr('Create it (once):'), 'web-class': 'tbHint' });
   for (const v of lists) {
     const t = typeOf(ws, v.getId()) || 'string[]';
     const isNum = t.startsWith('number');
@@ -260,7 +262,7 @@ function listsFlyout(ws: Blockly.WorkspaceSvg): Blockly.utils.toolbox.FlyoutItem
       },
     });
   }
-  items.push({ kind: 'label', text: 'Change it:', 'web-class': 'tbHint' });
+  items.push({ kind: 'label', text: tr('Change it:'), 'web-class': 'tbHint' });
   items.push(
     { kind: 'block', type: 'ts_list_add', fields: L, inputs: { ITEM: txt('kiwi') } },
     { kind: 'block', type: 'ts_list_add_front', fields: L, inputs: { ITEM: txt('kiwi') } },
@@ -270,7 +272,7 @@ function listsFlyout(ws: Blockly.WorkspaceSvg): Blockly.utils.toolbox.FlyoutItem
     { kind: 'block', type: 'ts_list_pop', fields: { ...L, END: 'pop' } },
     { kind: 'block', type: 'ts_list_sort', fields: { ...L, HOW: 'sort' } },
   );
-  items.push({ kind: 'label', text: 'Look inside it:', 'web-class': 'tbHint' });
+  items.push({ kind: 'label', text: tr('Look inside it:'), 'web-class': 'tbHint' });
   items.push(
     { kind: 'block', type: 'ts_foreach', inputs: { LIST: { block: { type: 'variables_get', fields: { VAR: { id: lists[0].getId() } } } } } },
     { kind: 'block', type: 'ts_list_item', fields: L, inputs: { INDEX: num(0) } },
@@ -283,7 +285,7 @@ function listsFlyout(ws: Blockly.WorkspaceSvg): Blockly.utils.toolbox.FlyoutItem
   const theList = () => ({ block: { type: 'variables_get', fields: { VAR: { id: lists[0].getId() } } } });
   const item = (prop?: string) =>
     prop ? { block: { type: 'ts_prop', fields: { PROP: prop }, inputs: { OBJ: { block: { type: 'variables_get', fields: { VAR: { name: 'item' } } } } } } } : { block: { type: 'variables_get', fields: { VAR: { name: 'item' } } } };
-  items.push({ kind: 'label', text: 'Do something with every item (item = the one it is looking at now):', 'web-class': 'tbHint' });
+  items.push({ kind: 'label', text: tr('Do something with every item (item = the one it is looking at now):'), 'web-class': 'tbHint' });
   items.push(
     { kind: 'block', type: 'ts_arr_foreach', inputs: { LIST: theList() } },
     { kind: 'block', type: 'ts_arr_map', inputs: { LIST: theList(), VALUE: { block: { type: 'ts_case', inputs: { TEXT: item() } } } } },
@@ -303,7 +305,7 @@ function listsFlyout(ws: Blockly.WorkspaceSvg): Blockly.utils.toolbox.FlyoutItem
     },
   );
 
-  items.push({ kind: 'label', text: 'The whole array:', 'web-class': 'tbHint' });
+  items.push({ kind: 'label', text: tr('The whole array:'), 'web-class': 'tbHint' });
   for (const v of lists) items.push({ kind: 'block', type: 'variables_get', fields: { VAR: { id: v.getId() } } });
   items.push({ kind: 'block', type: 'ts_list_literal', extraState: { itemCount: 2 }, inputs: { ITEM0: txt('a'), ITEM1: txt('b') } });
   return items as Blockly.utils.toolbox.FlyoutItemInfoArray;
@@ -313,7 +315,7 @@ function functionsFlyout(ws: Blockly.WorkspaceSvg): Blockly.utils.toolbox.Flyout
   const items = Blockly.Procedures.flyoutCategory(ws).filter((i) => (i as { type?: string }).type !== 'procedures_ifreturn');
   const at = items.findIndex((i) => (i as { type?: string }).type === 'procedures_defreturn');
   items.splice(at + 1, 0, { kind: 'block', type: 'ts_return' } as never);
-  items.unshift({ kind: 'label', text: 'Right-click a function block to set its types.', 'web-class': 'tbHint' } as never);
+  items.unshift({ kind: 'label', text: tr('Right-click a function block to set its types.'), 'web-class': 'tbHint' } as never);
   return items as Blockly.utils.toolbox.FlyoutItemInfoArray;
 }
 
@@ -326,7 +328,7 @@ Blockly.ContextMenuRegistry.registry.register({
   id: 'tb_function_types',
   scopeType: Blockly.ContextMenuRegistry.ScopeType.BLOCK,
   weight: -10,
-  displayText: 'Set parameter & return types...',
+  displayText: tr('Set parameter & return types...'),
   preconditionFn: (scope) => (scope.block && scope.block.type.startsWith('procedures_def') && !scope.block.isInFlyout ? 'enabled' : 'hidden'),
   callback: async (scope) => {
     const block = scope.block!;
@@ -334,11 +336,11 @@ Blockly.ContextMenuRegistry.registry.register({
     const params = block.getVarModels();
     const types = params.map((_, i) => (m.types && i < m.types.length ? m.types[i] : 'any'));
     for (let i = 0; i < params.length; i++) {
-      const r = await openDialog({ title: `Type of parameter "${params[i].getName()}"`, input: types[i], message: 'e.g. number, string, boolean, string[]' });
+      const r = await openDialog({ title: trf('Type of parameter "{0}"', params[i].getName()), input: types[i], message: tr('e.g. number, string, boolean, string[]') });
       if (!r) return;
       types[i] = r.name;
     }
-    const r = await openDialog({ title: `What does ${block.getFieldValue('NAME')} give back?`, input: m.ret ?? '', message: 'Leave empty to let TypeScript work it out.' });
+    const r = await openDialog({ title: trf('What does {0} give back?', block.getFieldValue('NAME')), input: m.ret ?? '', message: tr('Leave empty to let TypeScript work it out.') });
     if (!r) return;
     const before = block.data;
     setMeta(block, { types, ret: r.name });
@@ -434,7 +436,7 @@ function load(workspace: object, fresh: boolean) {
     Blockly.serialization.workspaces.load(workspace, ws);
     ws.cleanUp();
   } catch (err) {
-    showBanner(`Could not show these blocks: ${(err as Error).message}`);
+    showBanner(trf('Could not show these blocks: {0}', (err as Error).message));
   } finally {
     Blockly.Events.enable();
     loading = false;
@@ -478,7 +480,7 @@ function renderArrays() {
     head.className = 'arrHead';
     head.innerHTML = `<b></b><span></span>`;
     head.querySelector('b')!.textContent = name;
-    head.querySelector("span")!.textContent = `starts with ${n} item${n === 1 ? "" : "s"}`;
+    head.querySelector("span")!.textContent = trf(n === 1 ? 'starts with {0} item' : 'starts with {0} items', n);
     row.appendChild(head);
     const cells = document.createElement('div');
     cells.className = 'cells';
@@ -505,7 +507,7 @@ function renderArrays() {
     if (!n) {
       const e = document.createElement('div');
       e.className = 'empty';
-      e.textContent = 'empty array []';
+      e.textContent = tr('empty array []');
       cells.appendChild(e);
     }
     row.appendChild(cells);
@@ -531,6 +533,11 @@ $('run').onclick = () => vscode.postMessage({ type: 'run' });
 $('stop').onclick = () => vscode.postMessage({ type: 'stop' });
 $('showCode').onclick = () => vscode.postMessage({ type: 'openCode' });
 $('showGuide').onclick = () => vscode.postMessage({ type: 'guide' });
+$('langBtn').onclick = () => {
+  const next = getLang() === 'cs' ? 'en' : 'cs';
+  if (typeof acquireVsCodeApi === 'function') vscode.postMessage({ type: 'setLang', lang: next });
+  else window.location.search = '?lang=' + next; // browser preview
+};
 $('cleanUp').onclick = () => ws.cleanUp();
 
 window.addEventListener('message', (ev: MessageEvent) => {
@@ -587,7 +594,7 @@ window.addEventListener('message', (ev: MessageEvent) => {
     case 'running':
       document.body.classList.toggle('running', !!m.running);
       $<HTMLButtonElement>('stop').disabled = !m.running;
-      $('run').querySelector('span')!.textContent = m.running ? 'Restart' : 'Run';
+      $('run').querySelector('span')!.textContent = tr(m.running ? 'Restart' : 'Run');
       break;
   }
 });
