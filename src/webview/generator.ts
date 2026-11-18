@@ -7,12 +7,27 @@ const RESERVED =
   'sleep,ask,readline,sayColored';
 
 const HATS = new Set(['ts_on_start', 'ts_every']);
+
+// Special precedence values for the two sides of + - * / % ** (see ts_arith).
+const ADD_LEFT = 6.21 as Order;
+const ADD_RIGHT = 6.09 as Order;
+const MUL_LEFT = 5.31 as Order;
+const MUL_RIGHT = 5.09 as Order;
+const POW_LEFT = 5.01 as Order;
+const POW_RIGHT = 5.02 as Order;
 const AWAITING = new Set(['ts_wait', 'ts_ask', 'ts_ask_number']);
 const DEFS = ['procedures_defnoreturn', 'procedures_defreturn'];
 const MARK = '\u0001%1\u0001\n';
+/** Put in front of a comment that belongs at the end of the previous code line. */
+const SAME_LINE = '\u0002';
 const ANSI: Record<string, number> = { red: 31, green: 32, yellow: 33, blue: 34, magenta: 35, cyan: 36 };
 
 interface Meta {
+  same?: boolean;
+  nospace?: boolean;
+  ptype?: string;
+  atype?: string;
+  noInit?: boolean;
   blank?: boolean;
   incr?: boolean;
   kind?: string;
@@ -50,9 +65,25 @@ export class TsGenerator extends JavascriptGenerator {
   asyncFns = new Set<string>();
   private helpers: Record<string, string> = {};
 
+  /** false = plain JavaScript without types (used by the guide to run examples in the browser) */
+  typed = true;
+  /** false = leave out the ask/sleep/sayColored helpers (the guide provides its own) */
+  emitHelpers = true;
+
   constructor() {
     super('TypeScript');
     Object.assign(this.forBlock, javascriptGenerator.forBlock, OVERRIDES);
+    // Parentheses for math: which inner operations need none on the left / right side.
+    this.ORDER_OVERRIDES.push(
+      [ADD_LEFT, Order.ADDITION],
+      [ADD_LEFT, Order.SUBTRACTION],
+      [MUL_LEFT, Order.MULTIPLICATION],
+      [MUL_LEFT, Order.DIVISION],
+      [MUL_LEFT, Order.MODULUS],
+      [MUL_LEFT, Order.EXPONENTIATION],
+      [MUL_RIGHT, Order.EXPONENTIATION],
+      [POW_RIGHT, Order.EXPONENTIATION],
+    );
     // Browser globals (name, status, ...) are fine in a Node program, so use our own list.
     this.RESERVED_WORDS_ = '';
     this.addReservedWords(RESERVED);
@@ -80,8 +111,12 @@ export class TsGenerator extends JavascriptGenerator {
     return safeName(name);
   }
 
+  /** "double" or 'single' quotes, whatever the file already uses. */
+  quoteStyle: 'single' | 'double' = 'double';
+
   override quote_(text: string): string {
-    return JSON.stringify(text);
+    if (this.quoteStyle === 'double') return JSON.stringify(text);
+    return "'" + JSON.stringify(text).slice(1, -1).replace(/\\"/g, '"').replace(/'/g, "\\'") + "'";
   }
 
   override workspaceToCode(ws?: Blockly.Workspace): string {
@@ -107,7 +142,8 @@ export class TsGenerator extends JavascriptGenerator {
   override finish(code: string): string {
     super.finish('');
     const out = [code.trimEnd()];
-    const helperCode = Object.values(this.helpers);
+    // helpers are written with 2 spaces; use the file's own indentation
+    const helperCode = (this.emitHelpers ? Object.values(this.helpers) : []).map((h) => h.replace(/^((?:  )+)/gm, (m) => this.INDENT.repeat(m.length / 2)));
     if (helperCode.length) {
       const shim: string[] = [];
       if (!this.nodeTypes && this.usesProcess) shim.push('declare const process: any;');
@@ -216,7 +252,7 @@ const OVERRIDES: Record<string, ReturnType<typeof G>> = {
   // ---------- Events ----------
   ts_on_start: G((block, g) => {
     const fn = g.nameDB_!.getDistinctName('main', Blockly.Names.NameType.PROCEDURE);
-    return `async function ${fn}(): Promise<void> {\n${chainBody(block, g)}}\n${fn}();\n`;
+    return `async function ${fn}()${g.typed ? ': Promise<void>' : ''} {\n${chainBody(block, g)}}\n${fn}();\n`;
   }),
   ts_every: G((block, g) => {
     const secs = val(g, block, 'SECS', Order.MULTIPLICATION, '1');
@@ -254,13 +290,18 @@ const OVERRIDES: Record<string, ReturnType<typeof G>> = {
   ts_say_color: G((block, g) => `${g.helperColor()}(${val(g, block, 'TEXT', Order.NONE, '""')}, ${ANSI[block.getFieldValue('COLOR')] ?? 0});\n`),
   ts_ask: G((block, g) => [`await ${g.helperAsk()}(${val(g, block, 'TEXT', Order.NONE, '""')})`, Order.AWAIT]),
   ts_ask_number: G((block, g) => [`Number(await ${g.helperAsk()}(${val(g, block, 'TEXT', Order.NONE, '""')}))`, Order.FUNCTION_CALL]),
-  ts_comment: G((block) => `// ${String(block.getFieldValue('TEXT') ?? '')}`.trimEnd() + '\n'),
+  ts_comment: G((block) => {
+    const m = meta(block);
+    const text = `//${m.nospace ? '' : ' '}${String(block.getFieldValue('TEXT') ?? '')}`.trimEnd();
+    return (m.same ? SAME_LINE : '') + text + '\n';
+  }),
 
   // ---------- Variables ----------
   ts_let: G((block, g) => {
-    const type = String(block.getFieldValue('TYPE') ?? '').trim();
+    const type = g.typed ? String(block.getFieldValue('TYPE') ?? '').trim() : '';
     const v = g.valueToCode(block, 'VALUE', Order.ASSIGNMENT);
-    return `${block.getFieldValue('KIND')} ${g.varName(block, 'VAR')}${type ? ': ' + type : ''}${v ? ' = ' + v : ''};\n`;
+    const exp = meta(block).exported && g.typed ? 'export ' : '';
+    return `${exp}${block.getFieldValue('KIND')} ${g.varName(block, 'VAR')}${type ? ': ' + type : ''}${v ? ' = ' + v : ''};\n`;
   }),
   variables_set: G((block, g) => `${g.varName(block, 'VAR')} = ${val(g, block, 'VALUE', Order.ASSIGNMENT, 'undefined')};\n`),
   math_change: G((block, g) => {
@@ -274,10 +315,25 @@ const OVERRIDES: Record<string, ReturnType<typeof G>> = {
   ts_arith: G((block, g) => {
     const op = block.getFieldValue('OP') as string;
     const order = ARITH_ORDER[op] ?? Order.ADDITION;
-    // right side of - / % ** needs parentheses when it is the same precedence
-    const rightOrder = op === '+' || op === '*' ? order : order - 0.01;
-    const a = val(g, block, 'A', op === '**' ? Order.EXPONENTIATION - 0.01 : order, '0');
-    const b = val(g, block, 'B', rightOrder, '0');
+    // Parentheses exactly where they change the meaning:
+    //   "Age: " + (age + 10)  keeps its ( ), because without them + would join text.
+    //   (a + b) + c and a * b / c need none.
+    // (Blockly compares precedence by whole numbers; the special orders below have
+    //  their own exceptions in ORDER_OVERRIDES, see the constructor.)
+    let left: number;
+    let right: number;
+    if (op === '+' || op === '-') {
+      left = ADD_LEFT; // a + b - c
+      right = ADD_RIGHT; // a - (b + c)
+    } else if (op === '**') {
+      left = POW_LEFT; // (a ** b) ** c
+      right = POW_RIGHT; // a ** b ** c
+    } else {
+      left = MUL_LEFT; // a * b / c
+      right = MUL_RIGHT; // a / (b * c)
+    }
+    const a = val(g, block, 'A', left, '0');
+    const b = val(g, block, 'B', right, '0');
     return [`${a} ${op} ${b}`, order];
   }),
   ts_compare: G((block, g) => {
@@ -309,7 +365,10 @@ const OVERRIDES: Record<string, ReturnType<typeof G>> = {
   ts_list_literal: G((block, g) => {
     const n = (block as unknown as { itemCount: number }).itemCount ?? 0;
     const items = Array.from({ length: n }, (_, i) => val(g, block, 'ITEM' + i, Order.COMMA, 'undefined'));
-    return [`[${items.join(', ')}]`, Order.ATOMIC];
+    const one = `[${items.join(', ')}]`;
+    // a long array (e.g. of objects) gets one item per line
+    if (one.length <= 80 && !one.includes('\n')) return [one, Order.ATOMIC];
+    return [`[\n${items.map((it) => g.prefixLines(it, g.INDENT) + ',').join('\n')}\n]`, Order.ATOMIC];
   }),
   ts_list_add: G((block, g) => `${g.varName(block, 'LIST')}.push(${val(g, block, 'ITEM', Order.NONE, '""')});\n`),
   ts_list_add_front: G((block, g) => `${g.varName(block, 'LIST')}.unshift(${val(g, block, 'ITEM', Order.NONE, '""')});\n`),
@@ -329,10 +388,45 @@ const OVERRIDES: Record<string, ReturnType<typeof G>> = {
   ts_list_join: G((block, g) => [`${g.varName(block, 'LIST')}.join(${val(g, block, 'SEP', Order.NONE, '", "')})`, Order.FUNCTION_CALL]),
   ts_list_split: G((block, g) => [`${val(g, block, 'TEXT', Order.MEMBER, '""')}.split(${val(g, block, 'SEP', Order.NONE, '","')})`, Order.FUNCTION_CALL]),
 
+  // ---------- Arrays: map / filter / some / every / find / reduce / forEach ----------
+  ts_arr_map: G((block, g) => [chain(g, block), Order.FUNCTION_CALL]),
+  ts_arr_filter: G((block, g) => [chain(g, block), Order.FUNCTION_CALL]),
+  ts_arr_some: G((block, g) => [chain(g, block), Order.FUNCTION_CALL]),
+  ts_arr_every: G((block, g) => [chain(g, block), Order.FUNCTION_CALL]),
+  ts_arr_find: G((block, g) => [chain(g, block), Order.FUNCTION_CALL]),
+  ts_arr_findindex: G((block, g) => [chain(g, block), Order.FUNCTION_CALL]),
+  ts_arr_reduce: G((block, g) => [chain(g, block), Order.FUNCTION_CALL]),
+  ts_arr_foreach: G((block, g) => chain(g, block) + ';\n'),
+
+  // ---------- Objects ----------
+  ts_prop: G((block, g) => [`${val(g, block, 'OBJ', Order.MEMBER, '{}')}.${propName(block.getFieldValue('PROP'))}`, Order.MEMBER]),
+  ts_prop_set: G((block, g) => `${val(g, block, 'OBJ', Order.MEMBER, '{}')}.${propName(block.getFieldValue('PROP'))} = ${val(g, block, 'VALUE', Order.ASSIGNMENT, 'undefined')};\n`),
+  ts_object: G((block, g) => {
+    const n = (block as unknown as { count: number }).count ?? 0;
+    const entries = Array.from({ length: n }, (_, i) => `${keyName(block.getFieldValue('K' + i))}: ${val(g, block, 'V' + i, Order.COMMA, 'undefined')}`);
+    if (!entries.length) return ['{}', Order.ATOMIC];
+    const one = `{ ${entries.join(', ')} }`;
+    if (one.length <= 80 && !one.includes('\n')) return [one, Order.ATOMIC];
+    return [`{\n${entries.map((e) => g.prefixLines(e, g.INDENT) + ',').join('\n')}\n}`, Order.ATOMIC];
+  }),
+  ts_type: G((block, g) => {
+    const b = block as unknown as { count: number; kind: string; exported: boolean };
+    if (!g.typed) return '';
+    const rows = Array.from({ length: b.count ?? 0 }, (_, i) => `${g.INDENT}${String(block.getFieldValue('N' + i) ?? '').trim()}: ${String(block.getFieldValue('T' + i) ?? 'any').trim() || 'any'};`);
+    const name = safeName(String(block.getFieldValue('NAME') ?? 'Thing'));
+    const exp = b.exported ? 'export ' : '';
+    const body = rows.length ? `{\n${rows.join('\n')}\n}` : '{}';
+    return b.kind === 'interface' ? `${exp}interface ${name} ${body}\n` : `${exp}type ${name} = ${body};\n`;
+  }),
+
   // ---------- Types ----------
   ts_typeof: G((block, g) => [`typeof ${val(g, block, 'VALUE', Order.TYPEOF, 'undefined')}`, Order.TYPEOF]),
-  ts_is_type: G((block, g) => [`typeof ${val(g, block, 'VALUE', Order.TYPEOF, 'undefined')} === "${block.getFieldValue('TYPE')}"`, Order.EQUALITY]),
-  ts_as: G((block, g) => [`${val(g, block, 'VALUE', Order.RELATIONAL, 'undefined')} as ${String(block.getFieldValue('TYPE') ?? 'any').trim() || 'any'}`, Order.RELATIONAL]),
+  ts_is_type: G((block, g) => [`typeof ${val(g, block, 'VALUE', Order.TYPEOF, 'undefined')} === ${g.quote_(String(block.getFieldValue('TYPE')))}`, Order.EQUALITY]),
+  ts_as: G((block, g) =>
+    g.typed
+      ? [`${val(g, block, 'VALUE', Order.RELATIONAL, 'undefined')} as ${String(block.getFieldValue('TYPE') ?? 'any').trim() || 'any'}`, Order.RELATIONAL]
+      : [val(g, block, 'VALUE', Order.NONE, 'undefined'), Order.NONE],
+  ),
 
   // ---------- Code ----------
   ts_code_stmt: G((block) => ((block as unknown as { code: string }).code ?? '').replace(/\s+$/, '') + '\n'),
@@ -358,6 +452,63 @@ const OVERRIDES: Record<string, ReturnType<typeof G>> = {
   }),
 };
 
+/** "(item)" or "(item: Type)" for an arrow function's parameter. */
+function arrow(g: TsGenerator, block: Blockly.Block, field: string, typeKey: 'ptype'): string {
+  const t = meta(block)[typeKey];
+  return `(${g.varName(block, field)}${t && g.typed ? ': ' + t : ''})`;
+}
+
+/** The ".method(...)" part of each array-method block. */
+const CALLS: Record<string, (g: TsGenerator, b: Blockly.Block) => string> = {
+  ts_arr_map: (g, b) => `map(${arrow(g, b, 'VAR', 'ptype')} => ${val(g, b, 'VALUE', Order.ASSIGNMENT, 'undefined')})`,
+  ts_arr_filter: (g, b) => `filter(${arrow(g, b, 'VAR', 'ptype')} => ${val(g, b, 'COND', Order.ASSIGNMENT, 'true')})`,
+  ts_arr_some: (g, b) => `some(${arrow(g, b, 'VAR', 'ptype')} => ${val(g, b, 'COND', Order.ASSIGNMENT, 'true')})`,
+  ts_arr_every: (g, b) => `every(${arrow(g, b, 'VAR', 'ptype')} => ${val(g, b, 'COND', Order.ASSIGNMENT, 'true')})`,
+  ts_arr_find: (g, b) => `find(${arrow(g, b, 'VAR', 'ptype')} => ${val(g, b, 'COND', Order.ASSIGNMENT, 'true')})`,
+  ts_arr_findindex: (g, b) => `findIndex(${arrow(g, b, 'VAR', 'ptype')} => ${val(g, b, 'COND', Order.ASSIGNMENT, 'true')})`,
+  ts_arr_reduce: (g, b) => {
+    const m = meta(b);
+    const acc = g.varName(b, 'ACC') + (m.atype && g.typed ? ': ' + m.atype : '');
+    const item = g.varName(b, 'VAR') + (m.ptype && g.typed ? ': ' + m.ptype : '');
+    const init = m.noInit ? '' : `, ${val(g, b, 'INIT', Order.COMMA, '0')}`;
+    return `reduce((${acc}, ${item}) => ${val(g, b, 'VALUE', Order.ASSIGNMENT, g.varName(b, 'ACC'))}${init})`;
+  },
+  ts_arr_foreach: (g, b) => `forEach(${arrow(g, b, 'VAR', 'ptype')} => {\n${g.statementToCode(b, 'DO')}})`,
+};
+
+/**
+ * list.filter(...).map(...) - written on one line when it is short,
+ * otherwise every method goes on its own line:
+ *   list
+ *     .filter(...)
+ *     .map(...)
+ */
+function chain(g: TsGenerator, block: Blockly.Block): string {
+  const calls: string[] = [];
+  let b: Blockly.Block = block;
+  for (;;) {
+    calls.unshift(CALLS[b.type](g, b));
+    const inner = b.getInputTargetBlock('LIST');
+    if (inner && CALLS[inner.type] && inner.type !== 'ts_arr_foreach') b = inner;
+    else break;
+  }
+  const base = val(g, b, 'LIST', Order.MEMBER, '[]');
+  const one = base + calls.map((c) => '.' + c).join('');
+  const firstLine = one.split('\n')[0];
+  if (calls.length < 2 || firstLine.length <= 80) return one;
+  return base + calls.map((c) => `\n${g.INDENT}.${g.prefixLines(c, g.INDENT).slice(g.INDENT.length)}`).join('');
+}
+
+const IDENT_RE = /^[A-Za-z_$][\w$]*$/;
+const propName = (p: unknown) => {
+  const s = String(p ?? '').trim();
+  return IDENT_RE.test(s) ? s : safeName(s);
+};
+const keyName = (k: unknown) => {
+  const s = String(k ?? '').trim();
+  return IDENT_RE.test(s) ? s : JSON.stringify(s);
+};
+
 function callArgs(block: Blockly.Block, g: TsGenerator): string {
   return block
     .getVarModels()
@@ -374,9 +525,9 @@ function defineFunction(block: Blockly.Block, g: TsGenerator): string {
   if (ret) ret = `${g.INDENT}return ${ret};\n`;
   const params = block.getVarModels().map((v, i) => {
     const t = m.types ? (i < m.types.length ? m.types[i] : 'any') : 'any';
-    return g.getVariableName(v.getId()) + (t ? ': ' + t : '');
+    return g.getVariableName(v.getId()) + (t && g.typed ? ': ' + t : '');
   });
-  const head = `${m.exported ? 'export ' : ''}${g.asyncFns.has(raw) ? 'async ' : ''}function ${name}(${params.join(', ')})${m.ret ? ': ' + m.ret : ''}`;
+  const head = `${m.exported && g.typed ? 'export ' : ''}${g.asyncFns.has(raw) ? 'async ' : ''}function ${name}(${params.join(', ')})${m.ret && g.typed ? ': ' + m.ret : ''}`;
   return g.mark(block) + `${head} {\n${body}${ret}}\n`;
 }
 
@@ -394,8 +545,19 @@ export interface Output {
 
 const gen = new TsGenerator();
 
-export function generate(ws: Blockly.Workspace, nodeTypes = true): Output {
+/** Plain JavaScript without types or helpers - the guide runs this in the browser. */
+export function generateJs(ws: Blockly.Workspace): string {
+  const js = new TsGenerator();
+  js.typed = false;
+  js.emitHelpers = false;
+  js.STATEMENT_PREFIX = null;
+  return js.workspaceToCode(ws);
+}
+
+export function generate(ws: Blockly.Workspace, nodeTypes = true, style?: { indent: string; quote: 'single' | 'double' }): Output {
   gen.nodeTypes = nodeTypes;
+  gen.INDENT = style?.indent ?? '  ';
+  gen.quoteStyle = style?.quote ?? 'double';
   gen.STATEMENT_PREFIX = MARK;
   const raw = gen.workspaceToCode(ws);
 
@@ -408,7 +570,19 @@ export function generate(ws: Blockly.Workspace, nodeTypes = true): Output {
       if (!starts.has(only[1])) starts.set(only[1], outLines.length);
       continue;
     }
-    outLines.push(line.replace(/\u0001'.*?'\u0001/g, ''));
+    const same = /^[ \t]*\u0002(.*)$/.exec(line);
+    if (same) {
+      let k = outLines.length - 1;
+      while (k >= 0 && outLines[k].trim() === '') k--;
+      if (k >= 0) {
+        outLines[k] += ' ' + same[1];
+        for (const [id, at] of starts) if (at === outLines.length) starts.set(id, k);
+        continue;
+      }
+      outLines.push(same[1]);
+      continue;
+    }
+    outLines.push(line.replace(/\u0001'.*?'\u0001/g, '').replace(/\u0002/g, ''));
   }
 
   const spans: LineSpan[] = [];

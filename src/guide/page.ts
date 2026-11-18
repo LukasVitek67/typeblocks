@@ -1,0 +1,38 @@
+/** Markup of the guide page (used inside VS Code and for the web version in docs/guide). */
+export function guidePageHtml(o: { csp?: string; nonce?: string; css: string[]; scripts: string[]; blocklyMedia: string }): string {
+  const n = o.nonce ? ` nonce="${o.nonce}"` : '';
+  return `<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+${o.csp ? `<meta http-equiv="Content-Security-Policy" content="${o.csp}">` : ''}
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TypeBlocks - průvodce</title>
+<meta name="description" content="Průvodce TypeBlocks: jak se z bloků stává TypeScript - s živými příklady.">
+${o.css.map((c) => `<link rel="stylesheet" href="${c}">`).join('\n')}
+</head>
+<body class="guide">
+<header class="gHead">
+  <div class="brand">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="3" width="12" height="7" rx="2" fill="#EF7D1A"/><rect x="6" y="12" width="16" height="7" rx="2" fill="#2F7FDB"/><path d="M6 10h4v2H6z" fill="#EF7D1A"/></svg>
+    <b>TypeBlocks</b><span class="sub">průvodce</span>
+  </div>
+  <a class="ghLink" href="https://github.com/LukasVitek67/typeblocks" target="_blank" rel="noopener">GitHub</a>
+</header>
+<div class="gWrap">
+  <nav id="toc" aria-label="Obsah"></nav>
+  <main id="content">
+    <div class="hero">
+      <h1>Z bloků se stává <span>TypeScript</span></h1>
+      <p>Každý blok je kousek opravdového kódu. V každé kapitole si můžeš bloky posouvat, měnit a <b>spustit</b> - a vpravo hned vidíš, jak se to píše v TypeScriptu.</p>
+      <div class="legend">
+        <span style="--c:#E09A0B">Události</span><span style="--c:#EF7D1A">Řízení</span><span style="--c:#8A63E8">Konzole</span><span style="--c:#2BA358">Operátory</span><span style="--c:#0E9E98">Text</span><span style="--c:#E0503A">Proměnné</span><span style="--c:#C8396A">Pole</span><span style="--c:#BE52C8">Funkce</span><span style="--c:#2F7FDB">Objekty</span><span style="--c:#5F6B7A">Kód</span>
+      </div>
+    </div>
+  </main>
+</div>
+<script${n}>window.BLOCKLY_MEDIA = ${JSON.stringify(o.blocklyMedia)};</script>
+${o.scripts.map((s) => `<script${n} src="${s}"></script>`).join('\n')}
+</body>
+</html>`;
+}

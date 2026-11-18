@@ -18,6 +18,7 @@ const vscode: VsApi =
       };
 
 let nodeTypes = true;
+let codeStyle: { indent: string; quote: 'single' | 'double' } | undefined;
 let loading = false;
 let selectingFromEditor = false;
 let spanIds = new Set<string>();
@@ -279,6 +280,29 @@ function listsFlyout(ws: Blockly.WorkspaceSvg): Blockly.utils.toolbox.FlyoutItem
     { kind: 'block', type: 'ts_list_indexof', fields: L, inputs: { ITEM: txt('apple') } },
     { kind: 'block', type: 'ts_list_join', fields: L, inputs: { SEP: txt(', ') } },
   );
+  const theList = () => ({ block: { type: 'variables_get', fields: { VAR: { id: lists[0].getId() } } } });
+  const item = (prop?: string) =>
+    prop ? { block: { type: 'ts_prop', fields: { PROP: prop }, inputs: { OBJ: { block: { type: 'variables_get', fields: { VAR: { name: 'item' } } } } } } } : { block: { type: 'variables_get', fields: { VAR: { name: 'item' } } } };
+  items.push({ kind: 'label', text: 'Do something with every item (item = the one it is looking at now):', 'web-class': 'tbHint' });
+  items.push(
+    { kind: 'block', type: 'ts_arr_foreach', inputs: { LIST: theList() } },
+    { kind: 'block', type: 'ts_arr_map', inputs: { LIST: theList(), VALUE: { block: { type: 'ts_case', inputs: { TEXT: item() } } } } },
+    { kind: 'block', type: 'ts_arr_filter', inputs: { LIST: theList(), COND: { block: { type: 'ts_compare', fields: { OP: '!==' }, inputs: { A: item(), B: txt('banana') } } } } },
+    { kind: 'block', type: 'ts_arr_some', inputs: { LIST: theList(), COND: { block: { type: 'ts_compare', fields: { OP: '===' }, inputs: { A: item(), B: txt('apple') } } } } },
+    { kind: 'block', type: 'ts_arr_every', inputs: { LIST: theList(), COND: { block: { type: 'ts_compare', fields: { OP: '>' }, inputs: { A: { block: { type: 'ts_length', inputs: { VALUE: item() } } }, B: num(2) } } } } },
+    { kind: 'block', type: 'ts_arr_find', inputs: { LIST: theList(), COND: { block: { type: 'ts_compare', fields: { OP: '>' }, inputs: { A: { block: { type: 'ts_length', inputs: { VALUE: item() } } }, B: num(5) } } } } },
+    { kind: 'block', type: 'ts_arr_findindex', inputs: { LIST: theList(), COND: { block: { type: 'ts_compare', fields: { OP: '===' }, inputs: { A: item(), B: txt('kiwi') } } } } },
+    {
+      kind: 'block',
+      type: 'ts_arr_reduce',
+      inputs: {
+        LIST: theList(),
+        INIT: num(0),
+        VALUE: { block: { type: 'ts_arith', fields: { OP: '+' }, inputs: { A: { block: { type: 'variables_get', fields: { VAR: { name: 'total' } } } }, B: { block: { type: 'ts_length', inputs: { VALUE: item() } } } } } },
+      },
+    },
+  );
+
   items.push({ kind: 'label', text: 'The whole array:', 'web-class': 'tbHint' });
   for (const v of lists) items.push({ kind: 'block', type: 'variables_get', fields: { VAR: { id: v.getId() } } });
   items.push({ kind: 'block', type: 'ts_list_literal', extraState: { itemCount: 2 }, inputs: { ITEM0: txt('a'), ITEM1: txt('b') } });
@@ -363,7 +387,7 @@ new MutationObserver(() => ws.setTheme(currentTheme())).observe(document.body, {
 new ResizeObserver(() => Blockly.svgResize(ws)).observe($('blockly'));
 
 function emit(kind: 'change' | 'code') {
-  const out = generate(ws, nodeTypes);
+  const out = generate(ws, nodeTypes, codeStyle);
   spanIds = new Set(out.spans.map((s) => s.id));
   renderArrays();
   vscode.postMessage({ type: kind, ts: out.ts, spans: out.spans });
@@ -512,6 +536,7 @@ window.addEventListener('message', (ev: MessageEvent) => {
   const m = ev.data as {
     type: string;
     workspace?: object;
+    style?: { indent: string; quote: 'single' | 'double' };
     fresh?: boolean;
     fileName?: string;
     nodeTypes?: boolean;
@@ -530,6 +555,7 @@ window.addEventListener('message', (ev: MessageEvent) => {
   switch (m.type) {
     case 'load':
       if (m.nodeTypes !== undefined) nodeTypes = m.nodeTypes;
+      if (m.style) codeStyle = m.style;
       if (m.tests !== undefined) con.setTests(m.tests);
       if (m.fileName) $('fileName').textContent = m.fileName;
       showBanner(m.error ?? '');

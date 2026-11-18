@@ -39,7 +39,7 @@ function roundTrip(src, nodeTypes = true) {
   const conv = tsToBlocks(src);
   const ws = new Blockly.Workspace();
   Blockly.serialization.workspaces.load(conv.workspace, ws);
-  const out = generate(ws, nodeTypes);
+  const out = generate(ws, nodeTypes, conv.style);
   ws.dispose();
   return { ts: out.ts, spans: out.spans, raw: conv.rawCount, blocks: conv.blockCount };
 }
@@ -155,7 +155,51 @@ console.log(greet("you"), area(points[0]));
 console.log(fs.existsSync("."));
 `;
 
+const BUFET = fs.readFileSync(path.join(root, 'examples', 'bufet.ts'), 'utf8');
+const BUFET_CHECK = `
+const o = [
+  { polozka: "rohlik", pocet: 3, cenaZaKus: 4, zaplaceno: true },
+  { polozka: "mleko", pocet: 1, cenaZaKus: 25, zaplaceno: false },
+  { polozka: "jablko", pocet: 2, cenaZaKus: 10, zaplaceno: true },
+];
+console.log("some", maNezaplacene(o));
+console.log("map", cenyObjednavek(o).join(","));
+console.log("filter", nezaplaceneObjednavky(o).map((x) => x.polozka).join(","));
+console.log("reduce", zaplacenaTrzba(o));
+`;
+
+// Array methods with arrow functions, objects, single quotes, tabs
+const METHODS = `type Pet = {
+	name: string;
+	age: number;
+};
+
+const pets: Pet[] = [{ name: 'Rex', age: 3 }, { name: 'Mia', age: 7 }];
+const names = pets.map((p) => p.name);
+const old = pets.find((p) => p.age > 5);
+const idx = pets.findIndex((p) => p.name === 'Mia');
+const allYoung = pets.every((p) => p.age < 10);
+pets.forEach((p) => {
+	console.log(p.name + ' is ' + p.age);
+});
+pets.forEach((p) => console.log(p.age));
+const total = pets.reduce((sum, p) => sum + p.age, 0);
+const rex = pets[0];
+rex.age = 4;
+console.log(names.join('|'), old?.name, idx, allYoung, total, rex.age, Math.max(1, 2));
+`;
+
+const PARENS = [
+  "let roky: number = 12;",
+  "console.log(\"Za 10 let: \" + (roky + 10));",
+  ...["roky - (3 - 1)", "roky - 3 - 1", "(roky + 1) * 2", "roky * 2 / 4", "roky / (2 * 3)", "2 ** 3 ** 2", "(2 ** 3) ** 2", "roky % 5 * 2", "\"a\" + 1 + 2", "1 + 2 + \"a\""].map((e) => `console.log(${e});`),
+  "",
+].join("\n");
+
 const cases = [
+  { name: "parentheses", src: PARENS, stdin: "", exact: true, noRaw: true, expect: ["Za 10 let: 22", "10\n8\n26\n6\n2\n512\n64\n4\na12\n3a"] },
+  { name: 'bufet (screenshot)', src: BUFET, stdin: '', noRaw: true, exact: true, append: BUFET_CHECK, expect: ['some true', 'map 12,25,20', 'filter mleko', 'reduce 32'], keep: ['    return objednavky.some((objednavka) => !objednavka.zaplaceno);', 'export type Objednavka = {', '        .reduce((celkem, objednavka) => celkem + objednavka.pocet * objednavka.cenaZaKus, 0);'] },
+  { name: 'array methods + tabs + single quotes', src: METHODS, stdin: '', keep: ["\tconsole.log(p.name + ' is ' + p.age);", "const pets: Pet[] = [{ name: 'Rex', age: 3 }, { name: 'Mia', age: 7 }];", 'const total = pets.reduce((sum, p) => sum + p.age, 0);'], expect: ['Rex is 3', 'Mia is 7', '3\n7', 'Rex|Mia Mia 1 true 10 4 2'] },
   { name: 'starter', src: STARTER_TS, stdin: 'Lukas\n', expect: ['Hello, Lukas', 'apple', 'kiwi', 'I know 4 fruits'] },
   { name: 'starter-no-node-types', src: STARTER_TS, nodeTypes: false, stdin: 'Ana\n', expect: ['Hello, Ana', 'I know 4 fruits'] },
   {
@@ -180,6 +224,7 @@ for (const c of cases) {
   const a = roundTrip(c.src, c.nodeTypes !== false);
   const b = roundTrip(a.ts, c.nodeTypes !== false);
   if (a.ts !== b.ts) problems.push('not stable: converting the output again gives different text\n' + diff(a.ts, b.ts));
+  if (c.exact && a.ts !== c.src) problems.push('not identical to the original file\n' + diff(c.src, a.ts));
   if (c.noRaw && a.raw) problems.push(`${a.raw} part(s) became raw code blocks`);
   for (const k of c.keep ?? []) if (!a.ts.includes(k)) problems.push(`lost: ${k}`);
   if (!a.spans.length) problems.push('no line spans');
@@ -198,7 +243,7 @@ for (const c of cases) {
     }
   }
 
-  const js = ts.transpileModule(a.ts, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
+  const js = ts.transpileModule(a.ts + (c.append ?? ''), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
   const jsFile = path.join(tmp, c.name + '.cjs');
   fs.writeFileSync(jsFile, js);
   const run = spawnSync(process.execPath, [jsFile], { input: c.stdin, encoding: 'utf8', timeout: 15000, cwd: tmp });

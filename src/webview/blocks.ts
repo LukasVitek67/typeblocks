@@ -100,6 +100,11 @@ export const ICONS = {
   each: svg('<path d="M15 8a5 5 0 1 1-2-4"/><path d="M13 1v3h3"/>'),
   last: svg(cells(3, 2, 2)),
   copy: svg('<rect x="3" y="3" width="9" height="9" rx="1.5"/><rect x="7" y="6" width="9" height="9" rx="1.5"/>'),
+  map: svg('<rect x="1" y="5" width="4" height="6" rx="1"/><path d="M7 8h6M11 5.5 13.5 8 11 10.5"/><rect x="15" y="5" width="4" height="6" rx="1" fill="#fff"/>'),
+  filter: svg('<path d="M3 3h14l-5.5 6v5l-3-1.5V9z"/>'),
+  some: svg('<circle cx="8" cy="7" r="4"/><path d="M11 10l4 4M17 3v4M17 9v.5"/>'),
+  every: svg('<path d="M2 8l2.5 2.5L9 6M9 8l2.5 2.5L16 6"/>'),
+  reduce: svg('<path d="M15 3H5l5 5-5 5h10"/>'),
 };
 
 const img = (src: string, w = 20) => ({ type: 'field_image', src, width: w, height: 16, alt: '' });
@@ -542,6 +547,111 @@ export function defineBlocks(): void {
       style: 'type_blocks',
       tooltip: 'Type assertion: tells TypeScript the type. Does NOT convert the value.',
     },
+    // ---- Arrays: do something with every item (map, filter, ...) ----
+    {
+      type: 'ts_arr_map',
+      message0: '%1 from %2 make a new array: each %3 becomes %4',
+      args0: [img(ICONS.map), { type: 'input_value', name: 'LIST' }, { type: 'field_variable', name: 'VAR', variable: 'item' }, { type: 'input_value', name: 'VALUE' }],
+      inputsInline: true,
+      output: null,
+      outputShape: SQUARE,
+      style: 'list_blocks',
+      tooltip: 'list.map(...) - like a factory: every item goes in, a changed item comes out. The new array is just as long.',
+    },
+    {
+      type: 'ts_arr_filter',
+      message0: '%1 from %2 keep only each %3 where %4',
+      args0: [img(ICONS.filter), { type: 'input_value', name: 'LIST' }, { type: 'field_variable', name: 'VAR', variable: 'item' }, { type: 'input_value', name: 'COND' }],
+      inputsInline: true,
+      output: null,
+      outputShape: SQUARE,
+      style: 'list_blocks',
+      tooltip: 'list.filter(...) - like a sieve: only the items where the condition is true stay.',
+    },
+    {
+      type: 'ts_arr_some',
+      message0: '%1 is there any %2 in %3 where %4 ?',
+      args0: [img(ICONS.some), { type: 'field_variable', name: 'VAR', variable: 'item' }, { type: 'input_value', name: 'LIST' }, { type: 'input_value', name: 'COND' }],
+      inputsInline: true,
+      output: 'Boolean',
+      style: 'list_blocks',
+      tooltip: 'list.some(...) - true if at least ONE item matches.',
+    },
+    {
+      type: 'ts_arr_every',
+      message0: '%1 is every %2 in %3 such that %4 ?',
+      args0: [img(ICONS.every), { type: 'field_variable', name: 'VAR', variable: 'item' }, { type: 'input_value', name: 'LIST' }, { type: 'input_value', name: 'COND' }],
+      inputsInline: true,
+      output: 'Boolean',
+      style: 'list_blocks',
+      tooltip: 'list.every(...) - true only if ALL items match.',
+    },
+    {
+      type: 'ts_arr_find',
+      message0: '%1 first %2 in %3 where %4',
+      args0: [img(ICONS.contains), { type: 'field_variable', name: 'VAR', variable: 'item' }, { type: 'input_value', name: 'LIST' }, { type: 'input_value', name: 'COND' }],
+      inputsInline: true,
+      output: null,
+      style: 'list_blocks',
+      tooltip: 'list.find(...) - the first item that matches (or undefined if none does).',
+    },
+    {
+      type: 'ts_arr_findindex',
+      message0: '%1 index of the first %2 in %3 where %4',
+      args0: [img(ICONS.index), { type: 'field_variable', name: 'VAR', variable: 'item' }, { type: 'input_value', name: 'LIST' }, { type: 'input_value', name: 'COND' }],
+      inputsInline: true,
+      output: 'Number',
+      style: 'list_blocks',
+      tooltip: 'list.findIndex(...) - where the first matching item is (or -1).',
+    },
+    {
+      type: 'ts_arr_reduce',
+      message0: '%1 add up %2 starting from %3 : %4 + each %5 gives %6',
+      args0: [
+        img(ICONS.reduce),
+        { type: 'input_value', name: 'LIST' },
+        { type: 'input_value', name: 'INIT' },
+        { type: 'field_variable', name: 'ACC', variable: 'total' },
+        { type: 'field_variable', name: 'VAR', variable: 'item' },
+        { type: 'input_value', name: 'VALUE' },
+      ],
+      inputsInline: true,
+      output: null,
+      style: 'list_blocks',
+      tooltip: 'list.reduce(...) - goes through the items one by one and builds one result, e.g. a sum. "total" is the result so far.',
+    },
+    {
+      type: 'ts_arr_foreach',
+      message0: '%1 with each %2 in %3 do',
+      args0: [img(ICONS.each), { type: 'field_variable', name: 'VAR', variable: 'item' }, { type: 'input_value', name: 'LIST' }],
+      message1: '%1',
+      args1: [{ type: 'input_statement', name: 'DO' }],
+      inputsInline: true,
+      previousStatement: null,
+      nextStatement: null,
+      style: 'list_blocks',
+      tooltip: 'list.forEach(...) - runs the blocks inside once for every item.',
+    },
+    // ---- Objects ----
+    {
+      type: 'ts_prop',
+      message0: '%1 of %2',
+      args0: [{ type: 'field_input', name: 'PROP', text: 'name' }, { type: 'input_value', name: 'OBJ' }],
+      inputsInline: true,
+      output: null,
+      style: 'type_blocks',
+      tooltip: 'object.property - one value stored inside an object, e.g. "price of order" is order.price',
+    },
+    {
+      type: 'ts_prop_set',
+      message0: 'set %1 of %2 to %3',
+      args0: [{ type: 'field_input', name: 'PROP', text: 'name' }, { type: 'input_value', name: 'OBJ' }, { type: 'input_value', name: 'VALUE' }],
+      inputsInline: true,
+      previousStatement: null,
+      nextStatement: null,
+      style: 'type_blocks',
+      tooltip: 'object.property = value',
+    },
     // ---- Code ----
     {
       type: 'ts_code_expr',
@@ -554,6 +664,8 @@ export function defineBlocks(): void {
   ]);
 
   defineListLiteral();
+  defineObjectLiteral();
+  defineTypeShape();
   defineRawStatement();
 
   // Built-in control blocks are "logic" styled by default - recolor to Control.
@@ -646,6 +758,112 @@ function defineListLiteral(): void {
       }
       const after = JSON.stringify(this.saveExtraState?.());
       Blockly.Events.fire(new (Blockly.Events.get(Blockly.Events.BLOCK_CHANGE))(this, 'mutation', null, before, after));
+      Blockly.Events.setGroup(false);
+    },
+  };
+}
+
+function fireMutation(block: Blockly.Block, before: string, after: string) {
+  Blockly.Events.fire(new (Blockly.Events.get(Blockly.Events.BLOCK_CHANGE))(block, 'mutation', null, before, after));
+}
+
+/** { name: (value), other: (value) } - an object, one row per property. */
+function defineObjectLiteral(): void {
+  type ObjBlock = Blockly.Block & { count: number; updateShape(): void; resize(d: number): void };
+  Blockly.Blocks['ts_object'] = {
+    init(this: ObjBlock) {
+      this.count = 2;
+      this.setOutput(true, null);
+      this.setStyle('type_blocks');
+      this.setTooltip('An object: named values that belong together, e.g. an order with an item name, a count and a price.');
+      this.appendDummyInput('HEAD').appendField('{');
+      this.updateShape();
+    },
+    saveExtraState(this: ObjBlock) {
+      return { count: this.count };
+    },
+    loadExtraState(this: ObjBlock, state: { count?: number }) {
+      this.count = state.count ?? 0;
+      this.updateShape();
+    },
+    updateShape(this: ObjBlock) {
+      if (this.getInput('TAIL')) this.removeInput('TAIL');
+      let i = 0;
+      while (this.getInput('V' + i)) {
+        if (i >= this.count) {
+          this.getInputTargetBlock('V' + i)?.unplug(false);
+          this.removeInput('V' + i);
+        }
+        i++;
+      }
+      for (let k = 0; k < this.count; k++) {
+        if (!this.getInput('V' + k)) this.appendValueInput('V' + k).appendField(new Blockly.FieldTextInput(k ? 'key' + k : 'name'), 'K' + k).appendField(':');
+      }
+      const tail = this.appendDummyInput('TAIL').appendField('}');
+      tail.appendField(new Blockly.FieldImage(ICONS.plus, 16, 16, 'add a property', () => this.resize(1)));
+      if (this.count > 0) tail.appendField(new Blockly.FieldImage(ICONS.minus, 16, 16, 'remove the last property', () => this.resize(-1)));
+    },
+    resize(this: ObjBlock, delta: number) {
+      if (this.isInFlyout || this.isDeadOrDying()) return;
+      const before = JSON.stringify({ count: this.count });
+      Blockly.Events.setGroup(true);
+      this.count = Math.max(0, this.count + delta);
+      this.updateShape();
+      fireMutation(this, before, JSON.stringify({ count: this.count }));
+      Blockly.Events.setGroup(false);
+    },
+  };
+}
+
+/** type Order = { item: string; count: number } - what an object looks like. */
+function defineTypeShape(): void {
+  type TypeBlock = Blockly.Block & { count: number; kind: 'type' | 'interface'; exported: boolean; updateShape(): void; resize(d: number): void };
+  Blockly.Blocks['ts_type'] = {
+    init(this: TypeBlock) {
+      this.count = 2;
+      this.kind = 'type';
+      this.exported = false;
+      this.setPreviousStatement(true);
+      this.setNextStatement(true);
+      this.setStyle('type_blocks');
+      this.setTooltip('Describes what an object looks like: which properties it has and what type each one is. TypeScript then checks you use it right.');
+      this.updateShape();
+    },
+    saveExtraState(this: TypeBlock) {
+      return { count: this.count, kind: this.kind, exported: this.exported };
+    },
+    loadExtraState(this: TypeBlock, s: { count?: number; kind?: 'type' | 'interface'; exported?: boolean }) {
+      this.count = s.count ?? 0;
+      this.kind = s.kind ?? 'type';
+      this.exported = !!s.exported;
+      this.updateShape();
+    },
+    updateShape(this: TypeBlock) {
+      const keep = new Map<string, string>();
+      for (const input of this.inputList) for (const f of input.fieldRow) if (f.name) keep.set(f.name, String(f.getValue()));
+      for (const input of [...this.inputList]) this.removeInput(input.name);
+      this.appendDummyInput('HEAD')
+        .appendField(`${this.exported ? 'export ' : ''}${this.kind}`)
+        .appendField(new Blockly.FieldTextInput(keep.get('NAME') ?? 'Thing'), 'NAME')
+        .appendField(this.kind === 'type' ? 'has:' : 'has:');
+      for (let k = 0; k < this.count; k++) {
+        this.appendDummyInput('R' + k)
+          .appendField('   ')
+          .appendField(new Blockly.FieldTextInput(keep.get('N' + k) ?? 'name'), 'N' + k)
+          .appendField(':')
+          .appendField(new Blockly.FieldTextInput(keep.get('T' + k) ?? 'string'), 'T' + k);
+      }
+      const tail = this.appendDummyInput('TAIL');
+      tail.appendField(new Blockly.FieldImage(ICONS.plus, 16, 16, 'add a property', () => this.resize(1)));
+      if (this.count > 0) tail.appendField(new Blockly.FieldImage(ICONS.minus, 16, 16, 'remove the last property', () => this.resize(-1)));
+    },
+    resize(this: TypeBlock, delta: number) {
+      if (this.isInFlyout || this.isDeadOrDying()) return;
+      const before = JSON.stringify(this.saveExtraState?.());
+      Blockly.Events.setGroup(true);
+      this.count = Math.max(0, this.count + delta);
+      this.updateShape();
+      fireMutation(this, before, JSON.stringify(this.saveExtraState?.()));
       Blockly.Events.setGroup(false);
     },
   };
@@ -773,9 +991,23 @@ export function buildToolbox(): Blockly.utils.toolbox.ToolboxDefinition {
       { kind: 'category', name: 'Functions', categorystyle: 'functions', custom: 'TS_FUNCTIONS' },
       {
         kind: 'category',
-        name: 'Types',
+        name: 'Objects',
         categorystyle: 'types',
         contents: [
+          { kind: 'label', text: 'Describe what an object looks like:', 'web-class': 'tbHint' } as never,
+          { kind: 'block', type: 'ts_type', extraState: { count: 3, kind: 'type', exported: false }, fields: { NAME: 'Order', N0: 'item', T0: 'string', N1: 'count', T1: 'number', N2: 'paid', T2: 'boolean' } },
+          { kind: 'label', text: 'Make one:', 'web-class': 'tbHint' } as never,
+          {
+            kind: 'block',
+            type: 'ts_object',
+            extraState: { count: 3 },
+            fields: { K0: 'item', K1: 'count', K2: 'paid' },
+            inputs: { V0: txt('bread'), V1: num(2), V2: { block: { type: 'logic_boolean', fields: { BOOL: 'FALSE' } } } },
+          },
+          { kind: 'label', text: 'Read or change a property:', 'web-class': 'tbHint' } as never,
+          { kind: 'block', type: 'ts_prop', fields: { PROP: 'count' } },
+          { kind: 'block', type: 'ts_prop_set', fields: { PROP: 'paid' }, inputs: { VALUE: { block: { type: 'logic_boolean', fields: { BOOL: 'TRUE' } } } } },
+          { kind: 'label', text: 'Types:', 'web-class': 'tbHint' } as never,
           { kind: 'block', type: 'ts_typeof', inputs: { VALUE: num(42) } },
           { kind: 'block', type: 'ts_is_type', inputs: { VALUE: txt('hi') } },
           { kind: 'block', type: 'ts_as' },

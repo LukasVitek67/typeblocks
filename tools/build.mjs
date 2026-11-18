@@ -25,16 +25,21 @@ writeIcon(r('media/icon.png'), 128);
 const common = { bundle: true, sourcemap: !minify, minify, logLevel: 'info' };
 const host = { ...common, entryPoints: [r('src/extension.ts')], platform: 'node', target: 'node18', format: 'cjs', external: ['vscode'], outfile: r('dist/extension.js') };
 const web = { ...common, entryPoints: [r('src/webview/main.ts')], platform: 'browser', target: 'es2022', format: 'iife', outfile: r('media/webview.js') };
+const guide = { ...common, sourcemap: false, entryPoints: [r('src/guide/guide.ts')], platform: 'browser', target: 'es2022', format: 'iife', outfile: r('media/guide.js') };
 
 if (watch) {
-  for (const o of [host, web]) await (await esbuild.context(o)).watch();
+  for (const o of [host, web, guide]) await (await esbuild.context(o)).watch();
 } else {
-  await Promise.all([esbuild.build(host), esbuild.build(web)]);
+  await Promise.all([esbuild.build(host), esbuild.build(web), esbuild.build(guide)]);
 }
 
 // ---- preview page (open in a browser, no VS Code needed) ----
 const page = await esbuild.build({
-  stdin: { contents: "export * from './src/page'; export * from './src/convert/tsToBlocks'; export * from './src/starter';", resolveDir: root, loader: 'ts' },
+  stdin: {
+    contents: "export * from './src/page'; export * from './src/convert/tsToBlocks'; export * from './src/starter'; export * from './src/guide/content'; export * from './src/guide/page';",
+    resolveDir: root,
+    loader: 'ts',
+  },
   bundle: true,
   platform: 'node',
   format: 'cjs',
@@ -46,7 +51,19 @@ const pageFile = r('.test-tmp', 'page.cjs'); // inside the project, so `typescri
 fs.writeFileSync(pageFile, page.outputFiles[0].text);
 const mod = createRequire(import.meta.url)(pageFile);
 fs.mkdirSync(r('preview'), { recursive: true });
-fs.writeFileSync(r('preview/index.html'), mod.pageHtml({ css: '../media/editor.css', js: '../media/webview.js', blocklyMedia: '../media/blockly/', previewWorkspace: mod.tsToBlocks(mod.STARTER_TS).workspace }));
+fs.writeFileSync(r('preview/index.html'), mod.pageHtml({ css: '../media/editor.css', js: '../media/webview.js', blocklyMedia: '../media/blockly/', previewWorkspace: mod.tsToBlocks(process.env.PREVIEW_FILE ? fs.readFileSync(process.env.PREVIEW_FILE, 'utf8') : mod.STARTER_TS).workspace }));
+
+// ---- guide: every example converted to blocks (media/guide-data.js) + a web copy in docs/guide ----
+const stamp = JSON.parse(fs.readFileSync(r('package.json'), 'utf8')).version + '-' + Date.now().toString(36);
+const workspaces = {};
+for (const s of mod.SECTIONS) if (s.code) workspaces[s.id] = mod.tsToBlocks(s.code).workspace;
+const guideData = `window.GUIDE_DATA = ${JSON.stringify({ sections: mod.SECTIONS, workspaces }).replace(/</g, '\\u003c')};\n`;
+fs.writeFileSync(r('media/guide-data.js'), guideData);
+const docs = r('docs/guide');
+fs.mkdirSync(path.join(docs, 'blockly'), { recursive: true });
+for (const f of ['guide.js', 'guide-data.js', 'guide.css']) fs.copyFileSync(r('media', f), path.join(docs, f));
+for (const f of fs.readdirSync(mediaDst)) fs.copyFileSync(path.join(mediaDst, f), path.join(docs, 'blockly', f));
+fs.writeFileSync(path.join(docs, 'index.html'), mod.guidePageHtml({ css: [`guide.css?v=${stamp}`], scripts: [`guide-data.js?v=${stamp}`, `guide.js?v=${stamp}`], blocklyMedia: 'blockly/' }));
 
 function writeIcon(file, size) {
   const px = Buffer.alloc(size * size * 4);

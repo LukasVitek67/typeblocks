@@ -186,14 +186,17 @@ class Session {
     const text = this.doc.getText();
     const fresh = first && !text.trim();
     let workspace: object | undefined;
+    let style: object | undefined;
     let error: string | undefined;
     try {
-      workspace = tsToBlocks(fresh ? STARTER_TS : text, path.basename(this.doc.uri.fsPath)).workspace;
+      const conv = tsToBlocks(fresh ? STARTER_TS : text, path.basename(this.doc.uri.fsPath));
+      workspace = conv.workspace;
+      style = conv.style;
     } catch (err) {
       error = `Could not read this file as TypeScript: ${err}`;
     }
     const tests = findTests(this.doc.uri);
-    this.post({ type: 'load', workspace, fresh, error, fileName: path.basename(this.doc.uri.fsPath), nodeTypes: hasNodeTypes(this.doc.uri), tests: tests ? { label: tests.label } : null });
+    this.post({ type: 'load', workspace, style, fresh, error, fileName: path.basename(this.doc.uri.fsPath), nodeTypes: hasNodeTypes(this.doc.uri), tests: tests ? { label: tests.label } : null });
   }
 
   private async onMessage(m: { type: string; ts?: string; spans?: Span[]; id?: string | null }) {
