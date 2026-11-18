@@ -8,3 +8,5 @@ preview/
 .test-tmp/
 *.vsix
 .impeccable/
+media/guide.js
+media/guide-data.js

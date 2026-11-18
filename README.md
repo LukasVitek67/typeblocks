@@ -5,6 +5,8 @@ No extra files: the blocks are just another view of your `.ts` file, and every c
 
 ![TypeBlocks: blocks on the left, the same file as normal code on the right](docs/screenshot.png)
 
+**📘 [Průvodce / Guide (Czech) - how every block works, with live examples you can run](https://lukasvitek67.github.io/typeblocks/guide/)** - also inside VS Code: the **?** button in the blocks editor.
+
 ## Install (one line)
 
 **Windows** - paste into PowerShell:
@@ -41,20 +43,22 @@ The layout button in the console header puts it **at the bottom (full width)**, 
 - functions with typed parameters and return types, calls, `return`
 - math, comparisons, `&&` `||` `!`, ternary, `typeof`, `as`
 - text: `+`, `.length`, `.includes`, `.toUpperCase()`, `.split()`, `String()`, `Number()`
-- comments (`// ...`) and blank lines are kept
+- objects `{ name: value }`, properties (`order.count`, `order.paid = true`), `type` / `interface` shapes, `export`
+- comments (`// ...`, also at the end of a line) and blank lines are kept
 
 ### Arrays - made easy
 
 - an array literal is a row of numbered slots `[ 0:(a) 1:(b) ]` with **+ / -** buttons
 - plain-English blocks with icons: *add to the end / start*, *insert at index*, *set item at index*, *remove item at index*, *remove the last / first item*, *sort / reverse*, *item at index*, *last item*, *length*, *contains*, *index of*, *join with*, *for each item in*
+- **array methods** as plain-English blocks: `.map` (*make a new array: each item becomes ...*), `.filter` (*keep only each item where ...*), `.some` / `.every` (*is there any / is every ...?*), `.find` / `.findIndex`, `.reduce` (*add up ... starting from ...*), `.forEach` - chains like `list.filter(...).reduce(...)` work too
 - the **Arrays** panel shows every array you create as a row of boxes with its indexes
 - indexes start at 0, exactly like TypeScript
 
 ### Everything else
 
-Classes, interfaces, imports, arrow functions, template strings, ... are shown as grey **TS code** blocks with the original text (click the pencil to edit). Nothing is ever lost.
+Classes, imports, template strings, ... are shown as grey **TS code** blocks with the original text (click the pencil to edit). Nothing is ever lost.
 
-Formatting of the parts that became blocks is normalized when you change something (2-space indent, double quotes, `;`). Same-line comments move onto their own line.
+The file keeps its own style: indentation (2 or 4 spaces, tabs), quote style, comments, blank lines and how method chains are split. Parts that became blocks always end with `;`.
 
 ## Settings
 

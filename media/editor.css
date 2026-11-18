@@ -522,3 +522,14 @@ button.icon svg { width: 16px; height: 16px; fill: none; stroke: currentColor; s
 #layoutMenu button[aria-checked="true"] { background: color-mix(in srgb, #8A63E8 28%, transparent); }
 #layoutMenu svg { width: 20px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.2; opacity: 0.9; }
 #layoutMenu svg .fill { fill: #8A63E8; stroke: #8A63E8; }
+
+/* "?" guide button */
+.help {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 14px;
+  border: 1px solid color-mix(in srgb, var(--fg) 25%, transparent);
+}

@@ -530,6 +530,7 @@ const con = initConsole((m) => vscode.postMessage(m));
 $('run').onclick = () => vscode.postMessage({ type: 'run' });
 $('stop').onclick = () => vscode.postMessage({ type: 'stop' });
 $('showCode').onclick = () => vscode.postMessage({ type: 'openCode' });
+$('showGuide').onclick = () => vscode.postMessage({ type: 'guide' });
 $('cleanUp').onclick = () => ws.cleanUp();
 
 window.addEventListener('message', (ev: MessageEvent) => {

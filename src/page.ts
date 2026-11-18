@@ -19,6 +19,7 @@ ${o.csp ? `<meta http-equiv="Content-Security-Policy" content="${o.csp}">` : ''}
   </div>
   <div class="actions">
     <button id="cleanUp" class="ghost" title="Tidy up block positions">Tidy</button>
+    <button id="showGuide" class="ghost help" title="Průvodce: jak co funguje (s příklady)" aria-label="Průvodce">?</button>
     <button id="showCode" class="ghost" title="Back to the normal TypeScript editor"><i class="code">&lt;/&gt;</i>Code</button>
     <button id="stop" class="stop" disabled title="Stop the program"><i class="sq"></i>Stop</button>
     <button id="run" class="run" title="Run this file in the terminal"><i class="tri"></i><span>Run</span></button>

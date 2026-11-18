@@ -32,16 +32,19 @@ body.vscode-dark, body.vscode-high-contrast {
 }
 
 * { box-sizing: border-box; }
-html { scroll-behavior: smooth; scroll-padding-top: 70px; }
-@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+/* the page body is the scroll container (VS Code webviews do not scroll the document reliably) */
+html { height: 100%; overflow: hidden; }
+@media (prefers-reduced-motion: no-preference) { body.guide { scroll-behavior: smooth; } }
 body.guide {
   margin: 0;
   background: var(--bg);
   color: var(--fg);
   font: 15px/1.65 var(--font);
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   display: block;
-  height: auto;
+  height: 100%;
+  scroll-padding-top: 70px;
 }
 
 .gHead {

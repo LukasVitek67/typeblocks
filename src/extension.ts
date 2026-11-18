@@ -7,6 +7,7 @@ import * as ts from 'typescript';
 import { pageHtml } from './page';
 import { tsToBlocks } from './convert/tsToBlocks';
 import { STARTER_TS } from './starter';
+import { guidePageHtml } from './guide/page';
 
 const VIEW_TYPE = 'typeblocks.editor';
 
@@ -29,6 +30,7 @@ export function activate(ctx: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('typeblocks.new', newProgram),
     vscode.commands.registerCommand('typeblocks.run', () => provider.active?.run()),
     vscode.commands.registerCommand('typeblocks.stop', () => provider.active?.stop()),
+    vscode.commands.registerCommand('typeblocks.guide', () => openGuide(ctx)),
     vscode.window.onDidChangeTextEditorSelection((e) => provider.onTextSelection(e)),
     vscode.window.onDidChangeVisibleTextEditors(() => provider.redecorateAll()),
     vscode.window.onDidCloseTerminal((t) => provider.onTerminalClosed(t)),
@@ -54,6 +56,30 @@ async function openBlocks(uri?: vscode.Uri): Promise<void> {
       if (tab.input instanceof vscode.TabInputText && tab.input.uri.toString() === target.toString()) await vscode.window.tabGroups.close(tab, true);
     }
   }
+}
+
+let guidePanel: vscode.WebviewPanel | undefined;
+
+/** The interactive guide (Czech), in its own tab next to the editor. */
+function openGuide(ctx: vscode.ExtensionContext): void {
+  if (guidePanel) {
+    guidePanel.reveal(vscode.ViewColumn.Beside);
+    return;
+  }
+  const media = vscode.Uri.joinPath(ctx.extensionUri, 'media');
+  guidePanel = vscode.window.createWebviewPanel('typeblocks.guide', 'TypeBlocks - průvodce', vscode.ViewColumn.Beside, {
+    enableScripts: true,
+    retainContextWhenHidden: true,
+    localResourceRoots: [media],
+  });
+  guidePanel.iconPath = vscode.Uri.joinPath(media, 'icon.png');
+  const w = guidePanel.webview;
+  const u = (p: string) => w.asWebviewUri(vscode.Uri.joinPath(media, p)).toString();
+  const nonce = [...Array(24)].map(() => Math.random().toString(36)[2]).join('');
+  // 'unsafe-eval': the "Spustit" buttons run the examples inside the page
+  const csp = [`default-src 'none'`, `img-src ${w.cspSource} data:`, `style-src ${w.cspSource} 'unsafe-inline'`, `font-src ${w.cspSource}`, `script-src 'nonce-${nonce}' 'unsafe-eval'`].join('; ');
+  w.html = guidePageHtml({ csp, nonce, css: [u('guide.css')], scripts: [u('guide-data.js'), u('guide.js')], blocklyMedia: u('blockly') + '/' });
+  guidePanel.onDidDispose(() => (guidePanel = undefined));
 }
 
 async function newProgram(): Promise<void> {
@@ -237,6 +263,9 @@ class Session {
         break;
       case 'stdin':
         this.runner?.write((m as { text?: string }).text ?? '');
+        break;
+      case 'guide':
+        void vscode.commands.executeCommand('typeblocks.guide');
         break;
       case 'openCode':
         await this.openCode();

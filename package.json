@@ -2,7 +2,7 @@
   "name": "typeblocks",
   "displayName": "TypeBlocks - see TypeScript as Scratch-style blocks",
   "description": "Open any .ts file as colorful drag-and-drop blocks, edit it there, and it is saved back as normal TypeScript.",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "publisher": "lukas-vitek",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -68,6 +68,12 @@
         "title": "Stop Program",
         "category": "TypeBlocks",
         "icon": "$(debug-stop)"
+      },
+      {
+        "command": "typeblocks.guide",
+        "title": "Open Guide (Průvodce)",
+        "category": "TypeBlocks",
+        "icon": "$(question)"
       }
     ],
     "menus": {
@@ -86,6 +92,11 @@
           "command": "typeblocks.openCode",
           "when": "activeCustomEditorId == typeblocks.editor",
           "group": "navigation@2"
+        },
+        {
+          "command": "typeblocks.guide",
+          "when": "activeCustomEditorId == typeblocks.editor",
+          "group": "navigation@3"
         }
       ],
       "commandPalette": [
