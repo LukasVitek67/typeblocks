@@ -12,3 +12,4 @@ media/guide.js
 media/guide-data.js
 media/guide-data.cs.js
 media/guide-data.en.js
+src/webview/presets.data.json

@@ -2,7 +2,7 @@
   "name": "typeblocks",
   "displayName": "TypeBlocks - see TypeScript as Scratch-style blocks",
   "description": "Open any .ts file as colorful drag-and-drop blocks, edit it there, and it is saved back as normal TypeScript.",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "publisher": "lukas-vitek",
   "license": "MIT",
   "icon": "media/icon.png",

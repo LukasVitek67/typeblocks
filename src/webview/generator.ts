@@ -298,7 +298,8 @@ const OVERRIDES: Record<string, ReturnType<typeof G>> = {
 
   // ---------- Variables ----------
   ts_let: G((block, g) => {
-    const type = g.typed ? String(block.getFieldValue('TYPE') ?? '').trim() : '';
+    const raw = String(block.getFieldValue('TYPE') ?? '').trim();
+    const type = g.typed && raw !== '-' ? raw : '';
     const v = g.valueToCode(block, 'VALUE', Order.ASSIGNMENT);
     const exp = meta(block).exported && g.typed ? 'export ' : '';
     return `${exp}${block.getFieldValue('KIND')} ${g.varName(block, 'VAR')}${type ? ': ' + type : ''}${v ? ' = ' + v : ''};\n`;
@@ -545,6 +546,16 @@ export interface Output {
 }
 
 const gen = new TsGenerator();
+
+/** The first line of TypeScript one block makes (shown next to search results). */
+export function codeSnippet(block: Blockly.Block): string {
+  const g = new TsGenerator();
+  g.STATEMENT_PREFIX = null;
+  g.init(block.workspace);
+  let c = g.blockToCode(block, true);
+  if (Array.isArray(c)) c = c[0];
+  return String(c ?? '').trim().split('\n')[0];
+}
 
 /** Plain JavaScript without types or helpers - the guide runs this in the browser. */
 export function generateJs(ws: Blockly.Workspace): string {

@@ -1,6 +1,7 @@
 import * as Blockly from 'blockly';
 import * as csLocale from 'blockly/msg/cs';
 import { getLang, tr } from '../i18n';
+import { addType, registerTypeExtension, TypeDropdown, typeMenu } from './types';
 
 /** Category palette. Vivid enough for white text, distinct from each other. */
 export const COLORS = {
@@ -14,6 +15,7 @@ export const COLORS = {
   functions: '#BE52C8',
   types: '#2F7FDB',
   code: '#5F6B7A',
+  recipes: '#F2B33D',
 } as const;
 
 export const VAR_TYPES = ['number', 'string', 'boolean', 'any'] as const;
@@ -130,7 +132,27 @@ function localize(defs: Record<string, unknown>[]): Record<string, unknown>[] {
   });
 }
 
+/** A type picked from a list (row of a "type ... has:" block). */
+function typeField(value: string): Blockly.FieldDropdown {
+  addType(value);
+  const f = new TypeDropdown(typeMenu(false));
+  f.setValue(value);
+  return f;
+}
+
 export function defineBlocks(): void {
+  registerTypeExtension();
+  // calling a function reads like a sentence: name(2, 3) on one line, not one row per argument
+  for (const t of ['procedures_callreturn', 'procedures_callnoreturn']) {
+    const def = Blockly.Blocks[t] as { init: () => void; tbInline?: boolean };
+    if (!def || def.tbInline) continue;
+    const init = def.init;
+    def.init = function (this: Blockly.Block) {
+      init.call(this);
+      this.setInputsInline(true);
+    };
+    def.tbInline = true;
+  }
   if (getLang() === 'cs') Blockly.setLocale(((csLocale as unknown as { default?: object }).default ?? csLocale) as Record<string, string>);
   Blockly.common.defineBlocksWithJsonArray(localize([
     // ---- Events ----
@@ -286,6 +308,7 @@ export function defineBlocks(): void {
       nextStatement: null,
       style: 'variable_blocks',
       tooltip: 'Create a variable. let = can change later, const = never changes. The type says what it holds (leave it empty to let TypeScript guess).',
+      extensions: ['tb_type_dropdown'],
     },
     // ---- Operators ----
     {
@@ -578,6 +601,7 @@ export function defineBlocks(): void {
       output: null,
       style: 'type_blocks',
       tooltip: 'Type assertion: tells TypeScript the type. Does NOT convert the value.',
+      extensions: ['tb_type_dropdown'],
     },
     // ---- Arrays: do something with every item (map, filter, ...) ----
     {
@@ -883,7 +907,7 @@ function defineTypeShape(): void {
           .appendField('   ')
           .appendField(new Blockly.FieldTextInput(keep.get('N' + k) ?? 'name'), 'N' + k)
           .appendField(':')
-          .appendField(new Blockly.FieldTextInput(keep.get('T' + k) ?? 'string'), 'T' + k);
+          .appendField(typeField(keep.get('T' + k) ?? 'string'), 'T' + k);
       }
       const tail = this.appendDummyInput('TAIL');
       tail.appendField(new Blockly.FieldImage(ICONS.plus, 16, 16, 'add a property', () => this.resize(1)));
@@ -943,6 +967,8 @@ export function buildToolbox(): Blockly.utils.toolbox.ToolboxDefinition {
   return {
     kind: 'categoryToolbox',
     contents: [
+      { kind: 'category', name: tr('Recipes'), categorystyle: 'recipes', custom: 'TS_RECIPES', ...({ toolboxitemid: 'tb_recipes' } as object) },
+      { kind: 'sep' },
       {
         kind: 'category',
         name: tr('Events'),

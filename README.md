@@ -36,6 +36,17 @@ Needs VS Code 1.90 or newer. Nothing else - Run uses the Node.js that is built i
 
 The layout button in the console header puts it **at the bottom (full width)**, **on the right (full height)**, or as a **card above / below the Arrays card**. The **Test** button runs `npm test` from the nearest `package.json` that has a `test` script, right in the console.
 
+### Finding blocks
+
+- **Search** above the categories: type `.filter`, `pole`, `random`, ... - matching blocks appear on the left, and the suggestion list puts the one you pick right where it makes sense (under the selected block or into its empty hole).
+- **Right-click a block -> Show what fits here**: the left side shows only blocks that fit the empty slot you clicked next to.
+- **One click** on a block on the left puts it in; dragging works as usual.
+- **Types are picked from a list** (text, number, yes/no, arrays, your own types) - never typed by hand.
+
+### Recipes
+
+The **Recipes** category at the top opens ready-made little programs: arrays (make, go through, filter, map, add up, find the biggest), math (calculator, what is calculated first, even/odd, average, dice, ask for a number) and functions that calculate (add, area, is it even, average, °C to °F). Every recipe explains in plain words what it does, shows its blocks and its TypeScript, and gives a *Try:* idea. **Insert** puts it under your program.
+
 ## What becomes blocks
 
 - variables (`let/const name: type = value`), `x = ...`, `x += ...`, `x++`
@@ -62,7 +73,7 @@ The file keeps its own style: indentation (2 or 4 spaces, tabs), quote style, co
 
 ## Languages
 
-Blocks, console, dialogs and the guide come in **English and Czech**. By default TypeBlocks follows the VS Code display language; the **EN / CZ** button in the blocks editor switches it (setting `typeblocks.language`). The code is always plain TypeScript.
+Blocks, console, dialogs and the guide come in **English and Czech**. By default TypeBlocks follows the VS Code display language; change it in Settings -> `typeblocks.language` (auto / cs / en). The code is always plain TypeScript.
 
 ## Updates
 

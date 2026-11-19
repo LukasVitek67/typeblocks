@@ -182,7 +182,38 @@ class Session {
   private spans: Span[] = [];
   /** Spans only match the file once the file text equals what the blocks produce. */
   private spansValid = false;
-  private lastWebviewText?: string;
+  /** Texts this editor is writing into the file right now. */
+  private ownTexts = new Set<string>();
+  private queuedText?: string;
+  private editChain: Promise<void> = Promise.resolve();
+
+  /**
+   * Writes what the blocks produce into the file. Only the changed part is replaced
+   * (the code editor does not jump), and quick changes are queued so only the newest one is written.
+   */
+  private writeFromBlocks(text: string): Promise<void> {
+    this.queuedText = text;
+    this.editChain = this.editChain.then(async () => {
+      const t = this.queuedText;
+      this.queuedText = undefined;
+      if (t === undefined) return;
+      const old = this.doc.getText();
+      if (t === old) return;
+      let a = 0;
+      while (a < old.length && a < t.length && old[a] === t[a]) a++;
+      let b = 0;
+      while (b < old.length - a && b < t.length - a && old[old.length - 1 - b] === t[t.length - 1 - b]) b++;
+      this.ownTexts.add(t);
+      try {
+        const edit = new vscode.WorkspaceEdit();
+        edit.replace(this.doc.uri, new vscode.Range(this.doc.positionAt(a), this.doc.positionAt(old.length - b)), t.slice(a, t.length - b));
+        await vscode.workspace.applyEdit(edit);
+      } finally {
+        this.ownTexts.delete(t);
+      }
+    });
+    return this.editChain;
+  }
   private terminal?: vscode.Terminal;
   private pty?: RunPty;
   private runner?: PanelRunner;
@@ -214,7 +245,9 @@ class Session {
       }),
       vscode.workspace.onDidChangeTextDocument((e) => {
         if (e.document !== doc || !e.contentChanges.length) return;
-        if (doc.getText() !== this.lastWebviewText) this.sendLoad(false);
+        // our own writes (and the ones still waiting) must not reload the blocks - that made them flicker
+        if (this.ownTexts.has(doc.getText()) || this.queuedText !== undefined) return;
+        this.sendLoad(false);
       }),
     );
     panel.onDidDispose(() => {
@@ -261,12 +294,7 @@ class Session {
       case 'code': {
         const text = m.ts ?? '';
         this.spans = m.spans ?? [];
-        if (m.type === 'change' && text !== this.doc.getText()) {
-          this.lastWebviewText = text;
-          const edit = new vscode.WorkspaceEdit();
-          edit.replace(this.doc.uri, new vscode.Range(0, 0, this.doc.lineCount, 0), text);
-          await vscode.workspace.applyEdit(edit);
-        }
+        if (m.type === 'change') await this.writeFromBlocks(text);
         this.spansValid = text === this.doc.getText();
         if (!this.openedBeside && this.cfg().get<boolean>('openTsBeside', true)) {
           this.openedBeside = true;
@@ -289,9 +317,6 @@ class Session {
         break;
       case 'stdin':
         this.runner?.write((m as { text?: string }).text ?? '');
-        break;
-      case 'setLang':
-        await vscode.workspace.getConfiguration('typeblocks').update('language', (m as { lang?: string }).lang === 'cs' ? 'cs' : 'en', vscode.ConfigurationTarget.Global);
         break;
       case 'guide':
         void vscode.commands.executeCommand('typeblocks.guide');

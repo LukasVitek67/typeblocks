@@ -266,6 +266,30 @@ for (const c of cases) {
     console.log(`ok   ${c.name}  (${a.blocks} blocks, ${a.raw} raw, ${a.ts.split('\n').length} lines)`);
   }
 }
+// recipes: blocks only (no raw code), and the code you see in the recipe card is what the blocks write
+{
+  const pre = await esbuild.build({ entryPoints: [path.join(root, 'src/presets.ts')], bundle: true, platform: 'node', format: 'cjs', write: false });
+  const preFile = path.join(tmp, 'presets.cjs');
+  fs.writeFileSync(preFile, pre.outputFiles[0].text);
+  const { PRESETS } = require(preFile);
+  let bad = 0;
+  for (const p of PRESETS)
+    for (const lang of ['cs', 'en']) {
+      const src = p[lang].code;
+      const a = roundTrip(src);
+      const problems = [];
+      if (a.raw) problems.push(`${a.raw} raw-code blocks`);
+      // blank lines between parts are fine; the ask() helper is added by the blocks on purpose
+      const norm = (t) => t.split('// ---- TypeBlocks helpers')[0].replace(/\n\s*\n/g, '\n').trim();
+      if (norm(a.ts) !== norm(src)) problems.push('blocks write different code:\n' + diff(norm(src), norm(a.ts)));
+      if (problems.length) {
+        bad++;
+        console.log(`FAIL recipe ${p.id} (${lang})\n  - ${problems.join('\n  - ')}`);
+      }
+    }
+  if (bad) failed++;
+  else console.log(`ok   recipes  (${PRESETS.length} x 2 languages)`);
+}
 console.log(failed ? `${failed} FAILED` : 'all passed');
 if (!failed) fs.rmSync(tmp, { recursive: true, force: true });
 process.exit(failed ? 1 : 0);

@@ -421,7 +421,7 @@ class Converter {
       if (!decls.every((d) => ts.isIdentifier(d.name) && !d.exclamationToken)) return undefined;
       return decls.map((d) => {
         const b = this.block('ts_let', {
-          fields: { KIND: kind, VAR: this.varRef((d.name as ts.Identifier).text), TYPE: d.type?.getText(this.sf) ?? '' },
+          fields: { KIND: kind, VAR: this.varRef((d.name as ts.Identifier).text), TYPE: d.type?.getText(this.sf) ?? '-' }, // '-' = no type written
         });
         if (d.initializer) b.inputs = { VALUE: { block: this.expr(d.initializer) } };
         if (exported) b.data = JSON.stringify({ exported: true });

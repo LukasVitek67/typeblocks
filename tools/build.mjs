@@ -21,22 +21,10 @@ for (const f of fs.readdirSync(mediaSrc)) if (!f.endsWith('.mp3') && !f.endsWith
 // ---- icon.png (two snapped blocks) ----
 writeIcon(r('media/icon.png'), 128);
 
-// ---- bundles ----
-const common = { bundle: true, sourcemap: !minify, minify, logLevel: 'info' };
-const host = { ...common, entryPoints: [r('src/extension.ts')], platform: 'node', target: 'node18', format: 'cjs', external: ['vscode'], outfile: r('dist/extension.js') };
-const web = { ...common, entryPoints: [r('src/webview/main.ts')], platform: 'browser', target: 'es2022', format: 'iife', outfile: r('media/webview.js') };
-const guide = { ...common, sourcemap: false, entryPoints: [r('src/guide/guide.ts')], platform: 'browser', target: 'es2022', format: 'iife', outfile: r('media/guide.js') };
-
-if (watch) {
-  for (const o of [host, web, guide]) await (await esbuild.context(o)).watch();
-} else {
-  await Promise.all([esbuild.build(host), esbuild.build(web), esbuild.build(guide)]);
-}
-
-// ---- preview page (open in a browser, no VS Code needed) ----
+// ---- converter module (preview page, guide and recipes use it) ----
 const page = await esbuild.build({
   stdin: {
-    contents: "export * from './src/page'; export * from './src/convert/tsToBlocks'; export * from './src/starter'; export * from './src/guide/content'; export * from './src/guide/content.en'; export * from './src/guide/page';",
+    contents: "export * from './src/page'; export * from './src/convert/tsToBlocks'; export * from './src/starter'; export * from './src/guide/content'; export * from './src/guide/content.en'; export * from './src/guide/page'; export * from './src/presets';",
     resolveDir: root,
     loader: 'ts',
   },
@@ -50,6 +38,32 @@ fs.mkdirSync(r('.test-tmp'), { recursive: true });
 const pageFile = r('.test-tmp', 'page.cjs'); // inside the project, so `typescript` resolves from node_modules
 fs.writeFileSync(pageFile, page.outputFiles[0].text);
 const mod = createRequire(import.meta.url)(pageFile);
+// ---- recipes: every preset converted to blocks, bundled into the webview ----
+const RAW = /"type":"ts_(code_expr|code_stmt|for_raw)"/;
+const presetData = { groups: mod.PRESET_GROUPS, presets: mod.PRESETS.map((p) => {
+  const out = { id: p.id, group: p.group };
+  for (const lang of ['cs', 'en']) {
+    const ws = mod.tsToBlocks(p[lang].code).workspace;
+    if (RAW.test(JSON.stringify(ws))) throw new Error('recipe ' + p.id + ' (' + lang + ') has a raw-code block - the converter does not understand part of it');
+    out[lang] = { ...p[lang], workspace: ws };
+  }
+  return out;
+}) };
+fs.writeFileSync(r('src/webview/presets.data.json'), JSON.stringify(presetData));
+
+// ---- bundles ----
+const common = { bundle: true, sourcemap: !minify, minify, logLevel: 'info' };
+const host = { ...common, entryPoints: [r('src/extension.ts')], platform: 'node', target: 'node18', format: 'cjs', external: ['vscode'], outfile: r('dist/extension.js') };
+const web = { ...common, entryPoints: [r('src/webview/main.ts')], platform: 'browser', target: 'es2022', format: 'iife', outfile: r('media/webview.js') };
+const guide = { ...common, sourcemap: false, entryPoints: [r('src/guide/guide.ts')], platform: 'browser', target: 'es2022', format: 'iife', outfile: r('media/guide.js') };
+
+if (watch) {
+  for (const o of [host, web, guide]) await (await esbuild.context(o)).watch();
+} else {
+  await Promise.all([esbuild.build(host), esbuild.build(web), esbuild.build(guide)]);
+}
+
+// ---- preview page (open in a browser, no VS Code needed) ----
 fs.mkdirSync(r('preview'), { recursive: true });
 fs.writeFileSync(r('preview/index.html'), mod.pageHtml({ css: '../media/editor.css', js: '../media/webview.js', blocklyMedia: '../media/blockly/', lang: process.env.PREVIEW_LANG, previewWorkspace: mod.tsToBlocks(process.env.PREVIEW_FILE ? fs.readFileSync(process.env.PREVIEW_FILE, 'utf8') : mod.STARTER_TS).workspace }));
 

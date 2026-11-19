@@ -22,7 +22,6 @@ ${o.csp ? `<meta http-equiv="Content-Security-Policy" content="${o.csp}">` : ''}
   </div>
   <div class="actions">
     <button id="cleanUp" class="ghost" title="${tr('Tidy up block positions')}">${tr('Tidy')}</button>
-    <button id="langBtn" class="ghost lang" title="${tr('Switch language')}">${getLang() === 'cs' ? 'CZ' : 'EN'}</button>
     <button id="showGuide" class="ghost help" title="${tr('Guide: how everything works (with examples)')}" aria-label="${tr('Guide')}">?</button>
     <button id="showCode" class="ghost" title="${tr('Back to the normal TypeScript editor')}"><i class="code">&lt;/&gt;</i>${tr('Code')}</button>
     <button id="stop" class="stop" disabled title="${tr('Stop the program')}"><i class="sq"></i>${tr('Stop')}</button>

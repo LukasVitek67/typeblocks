@@ -2,7 +2,10 @@ import * as Blockly from 'blockly';
 import { buildToolbox, defineBlocks, hooks, ITEM_TYPES, makeTheme, VAR_TYPES } from './blocks';
 import { generate, meta, setMeta } from './generator';
 import { initConsole } from './console';
-import { getLang, tr, trf } from '../i18n';
+import { initFinder } from './finder';
+import { initRecipes } from './recipes';
+import { collectTypes, NO_TYPE, setTypeWorkspace, typeLabel, typeValues } from './types';
+import { tr, trf } from '../i18n';
 
 interface VsApi {
   postMessage(msg: unknown): void;
@@ -61,6 +64,8 @@ function openDialog(opts: {
   message?: string;
   input?: string;
   types?: readonly string[];
+  /** how a type choice is shown (default: as it is) */
+  label?: (v: string) => string;
   type?: string;
   code?: string;
   okText?: string;
@@ -90,7 +95,7 @@ function openDialog(opts: {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'chip' + (t === chosen ? ' on' : '');
-    b.textContent = t;
+    b.textContent = opts.label ? opts.label(t) : t;
     b.onclick = () => {
       chosen = t;
       typeRow.querySelectorAll('.chip').forEach((c) => c.classList.toggle('on', c === b));
@@ -168,7 +173,7 @@ function letBlockOf(ws: Blockly.Workspace, id: string): Blockly.Block | undefine
 function typeOf(ws: Blockly.Workspace, id: string): string {
   const b = letBlockOf(ws, id);
   const t = b ? String(b.getFieldValue('TYPE') ?? '') : '';
-  return t || pendingTypes.get(id) || '';
+  return (t !== NO_TYPE && t) || pendingTypes.get(id) || '';
 }
 
 function isArrayVar(ws: Blockly.Workspace, id: string): boolean {
@@ -184,7 +189,8 @@ async function makeVariable(ws: Blockly.WorkspaceSvg, array: boolean) {
     title: tr(array ? 'New array' : 'New variable'),
     message: tr(array ? 'What will the array hold? (an array of strings is written string[])' : 'What kind of value will it hold?'),
     input: '',
-    types: array ? ITEM_TYPES : VAR_TYPES,
+    types: typeValues(false).filter((t) => !t.endsWith('[]')),
+    label: typeLabel,
     okText: tr('Create'),
   });
   if (!r || !r.name) return;
@@ -222,7 +228,7 @@ function variablesFlyout(ws: Blockly.WorkspaceSvg): Blockly.utils.toolbox.Flyout
     items.push({ kind: 'label', text: tr('Create it (once):'), 'web-class': 'tbHint' });
     for (const v of vars) {
       const t = typeOf(ws, v.getId());
-      items.push({ kind: 'block', type: 'ts_let', fields: { KIND: 'let', VAR: { id: v.getId() }, TYPE: t }, inputs: clean({ VALUE: defaultFor(t) }) });
+      items.push({ kind: 'block', type: 'ts_let', fields: { KIND: 'let', VAR: { id: v.getId() }, TYPE: t || NO_TYPE }, inputs: clean({ VALUE: defaultFor(t) }) });
     }
     items.push({ kind: 'label', text: tr('Use it:'), 'web-class': 'tbHint' });
     for (const v of vars) items.push({ kind: 'block', type: 'variables_get', fields: { VAR: { id: v.getId() } } });
@@ -232,6 +238,39 @@ function variablesFlyout(ws: Blockly.WorkspaceSvg): Blockly.utils.toolbox.Flyout
     items.push({ kind: 'block', type: 'math_change', fields: { VAR: { id: first.getId() } }, inputs: { DELTA: num(1) } });
   }
   return items as Blockly.utils.toolbox.FlyoutItemInfoArray;
+}
+
+/** Every array block, for the search - also when the file has no array variable yet ("list" is created when used). */
+function arrayCatalog(): Blockly.utils.toolbox.FlyoutItemInfoArray {
+  const L = { LIST: { name: 'list' } };
+  const list = () => ({ block: { type: 'variables_get', fields: { VAR: { name: 'list' } } } });
+  const item = () => ({ block: { type: 'variables_get', fields: { VAR: { name: 'item' } } } });
+  const cond = () => ({ block: { type: 'ts_compare', fields: { OP: '===' }, inputs: { A: item(), B: txt('apple') } } });
+  return [
+    { kind: 'block', type: 'ts_list_literal', extraState: { itemCount: 2 }, inputs: { ITEM0: txt('apple'), ITEM1: txt('banana') } },
+    { kind: 'block', type: 'ts_list_add', fields: L, inputs: { ITEM: txt('kiwi') } },
+    { kind: 'block', type: 'ts_list_add_front', fields: L, inputs: { ITEM: txt('kiwi') } },
+    { kind: 'block', type: 'ts_list_insert', fields: L, inputs: { ITEM: txt('kiwi'), INDEX: num(1) } },
+    { kind: 'block', type: 'ts_list_replace', fields: L, inputs: { INDEX: num(0), ITEM: txt('kiwi') } },
+    { kind: 'block', type: 'ts_list_remove', fields: L, inputs: { INDEX: num(0) } },
+    { kind: 'block', type: 'ts_list_pop', fields: { ...L, END: 'pop' } },
+    { kind: 'block', type: 'ts_list_sort', fields: { ...L, HOW: 'sort' } },
+    { kind: 'block', type: 'ts_list_item', fields: L, inputs: { INDEX: num(0) } },
+    { kind: 'block', type: 'ts_list_last', fields: L },
+    { kind: 'block', type: 'ts_list_length', fields: L },
+    { kind: 'block', type: 'ts_list_contains', fields: L, inputs: { ITEM: txt('apple') } },
+    { kind: 'block', type: 'ts_list_indexof', fields: L, inputs: { ITEM: txt('apple') } },
+    { kind: 'block', type: 'ts_list_join', fields: L, inputs: { SEP: txt(', ') } },
+    { kind: 'block', type: 'ts_foreach', inputs: { LIST: list() } },
+    { kind: 'block', type: 'ts_arr_foreach', inputs: { LIST: list() } },
+    { kind: 'block', type: 'ts_arr_map', inputs: { LIST: list(), VALUE: { block: { type: 'ts_case', inputs: { TEXT: item() } } } } },
+    { kind: 'block', type: 'ts_arr_filter', inputs: { LIST: list(), COND: cond() } },
+    { kind: 'block', type: 'ts_arr_some', inputs: { LIST: list(), COND: cond() } },
+    { kind: 'block', type: 'ts_arr_every', inputs: { LIST: list(), COND: cond() } },
+    { kind: 'block', type: 'ts_arr_find', inputs: { LIST: list(), COND: cond() } },
+    { kind: 'block', type: 'ts_arr_findindex', inputs: { LIST: list(), COND: cond() } },
+    { kind: 'block', type: 'ts_arr_reduce', inputs: { LIST: list(), INIT: num(0), VALUE: { block: { type: 'ts_arith', fields: { OP: '+' }, inputs: { A: { block: { type: 'variables_get', fields: { VAR: { name: 'total' } } } }, B: item() } } } } },
+  ] as unknown as Blockly.utils.toolbox.FlyoutItemInfoArray;
 }
 
 function listsFlyout(ws: Blockly.WorkspaceSvg): Blockly.utils.toolbox.FlyoutItemInfoArray {
@@ -336,14 +375,19 @@ Blockly.ContextMenuRegistry.registry.register({
     const params = block.getVarModels();
     const types = params.map((_, i) => (m.types && i < m.types.length ? m.types[i] : 'any'));
     for (let i = 0; i < params.length; i++) {
-      const r = await openDialog({ title: trf('Type of parameter "{0}"', params[i].getName()), input: types[i], message: tr('e.g. number, string, boolean, string[]') });
+      const r = await openDialog({ title: trf('Type of parameter "{0}"', params[i].getName()), types: typeValues(false), type: types[i] || 'any', label: typeLabel });
       if (!r) return;
-      types[i] = r.name;
+      types[i] = r.type;
     }
-    const r = await openDialog({ title: trf('What does {0} give back?', block.getFieldValue('NAME')), input: m.ret ?? '', message: tr('Leave empty to let TypeScript work it out.') });
+    const r = await openDialog({
+      title: trf('What does {0} give back?', block.getFieldValue('NAME')),
+      types: [NO_TYPE, 'void', ...typeValues(false)],
+      type: m.ret || NO_TYPE,
+      label: (v) => (v === 'void' ? tr('nothing (void)') : typeLabel(v)),
+    });
     if (!r) return;
     const before = block.data;
-    setMeta(block, { types, ret: r.name });
+    setMeta(block, { types, ret: r.type === NO_TYPE ? '' : r.type });
     Blockly.Events.fire(new (Blockly.Events.get(Blockly.Events.BLOCK_CHANGE))(block, 'data', null, before, block.data));
   },
 });
@@ -361,7 +405,19 @@ for (const n of [Blockly.ShortcutItems.names.UNDO, Blockly.ShortcutItems.names.R
   }
 }
 
+/** Keeps the trash can and the zoom buttons above the Arrays / console cards in the bottom-right corner. */
+class CornerAwareMetrics extends Blockly.MetricsManager {
+  override getUiMetrics(): Blockly.MetricsManager.UiMetrics {
+    const m = super.getUiMetrics();
+    const stack = document.getElementById('floatStack');
+    const inset = stack && stack.offsetHeight > 0 ? stack.offsetHeight + 14 : 0;
+    if (!inset) return m;
+    return { ...m, viewMetrics: { ...m.viewMetrics, height: Math.max(140, m.viewMetrics.height - inset) } };
+  }
+}
+
 const ws = Blockly.inject($('blockly'), {
+  plugins: { metricsManager: CornerAwareMetrics },
   renderer: 'zelos',
   theme: currentTheme(),
   toolbox: buildToolbox(),
@@ -379,14 +435,23 @@ for (const el of document.querySelectorAll<HTMLElement>('.blocklyToolboxCategory
   if (c) el.style.setProperty('--cat', c);
 }
 
+setTypeWorkspace(ws);
+initRecipes(ws, currentTheme);
 ws.registerToolboxCategoryCallback('TS_VARIABLES', variablesFlyout);
 ws.registerToolboxCategoryCallback('TS_LISTS', listsFlyout);
 ws.registerToolboxCategoryCallback('TS_FUNCTIONS', functionsFlyout);
+initFinder(ws, {
+  toolbox: buildToolbox,
+  custom: (name) =>
+    (name === 'TS_VARIABLES' ? variablesFlyout(ws) : name === 'TS_LISTS' ? [...listsFlyout(ws), ...arrayCatalog()] : name === 'TS_FUNCTIONS' ? functionsFlyout(ws) : []) as unknown as Record<string, unknown>[],
+});
 ws.registerButtonCallback('TS_NEW_VAR', () => void makeVariable(ws, false));
 ws.registerButtonCallback('TS_NEW_LIST', () => void makeVariable(ws, true));
 
 new MutationObserver(() => ws.setTheme(currentTheme())).observe(document.body, { attributes: true, attributeFilter: ['class'] });
 new ResizeObserver(() => Blockly.svgResize(ws)).observe($('blockly'));
+// when the Arrays / console cards grow or shrink, move the trash can and zoom buttons with them
+new ResizeObserver(() => Blockly.svgResize(ws)).observe($('floatStack'));
 
 function emit(kind: 'change' | 'code') {
   const out = generate(ws, nodeTypes, codeStyle);
@@ -429,12 +494,25 @@ let loadedOnce = false;
 function load(workspace: object, fresh: boolean) {
   const { scrollX, scrollY } = ws;
   const scale = ws.scale;
+  // where the stacks were, in code order - after a reload (undo, edit in the code) they stay put
+  const before = loadedOnce ? ws.getTopBlocks(true).filter((b) => !b.outputConnection).map((b) => b.getRelativeToSurfaceXY()) : [];
   loading = true;
   Blockly.Events.disable();
   try {
     ws.clear();
+    collectTypes(workspace);
     Blockly.serialization.workspaces.load(workspace, ws);
-    ws.cleanUp();
+    if (!before.length) ws.cleanUp();
+    else {
+      let bottom = 0;
+      ws.getTopBlocks(true).forEach((b, i) => {
+        const at = before[i];
+        const target = at ?? new Blockly.utils.Coordinate(before[0].x, bottom + 40);
+        const now = b.getRelativeToSurfaceXY();
+        b.moveBy(target.x - now.x, target.y - now.y);
+        bottom = Math.max(bottom, target.y + b.getHeightWidth().height);
+      });
+    }
   } catch (err) {
     showBanner(trf('Could not show these blocks: {0}', (err as Error).message));
   } finally {
@@ -533,11 +611,6 @@ $('run').onclick = () => vscode.postMessage({ type: 'run' });
 $('stop').onclick = () => vscode.postMessage({ type: 'stop' });
 $('showCode').onclick = () => vscode.postMessage({ type: 'openCode' });
 $('showGuide').onclick = () => vscode.postMessage({ type: 'guide' });
-$('langBtn').onclick = () => {
-  const next = getLang() === 'cs' ? 'en' : 'cs';
-  if (typeof acquireVsCodeApi === 'function') vscode.postMessage({ type: 'setLang', lang: next });
-  else window.location.search = '?lang=' + next; // browser preview
-};
 $('cleanUp').onclick = () => ws.cleanUp();
 
 window.addEventListener('message', (ev: MessageEvent) => {
