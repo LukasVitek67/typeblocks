@@ -1,7 +1,8 @@
 import * as Blockly from 'blockly';
 import * as csLocale from 'blockly/msg/cs';
 import { getLang, tr } from '../i18n';
-import { addType, registerTypeExtension, TypeDropdown, typeMenu } from './types';
+import { addType, BaseDropdown, NO_TYPE, registerTypeExtension, TypeDropdown, typeMenu } from './types';
+import { defineMoreBlocks } from './blocksMore';
 
 /** Category palette. Vivid enough for white text, distinct from each other. */
 export const COLORS = {
@@ -141,7 +142,12 @@ function typeField(value: string): Blockly.FieldDropdown {
 }
 
 export function defineBlocks(): void {
+  // A file must always load: in TypeScript a number or text may stand where yes/no is expected
+  // (if (list.length) ...), a text may be an index (record[key]) ... The hole shapes still show
+  // what usually goes where, "Show what fits here" still filters by them, and tsc checks real errors.
+  Blockly.ConnectionChecker.prototype.doTypeChecks = () => true;
   registerTypeExtension();
+  defineMoreBlocks();
   // calling a function reads like a sentence: name(2, 3) on one line, not one row per argument
   for (const t of ['procedures_callreturn', 'procedures_callnoreturn']) {
     const def = Blockly.Blocks[t] as { init: () => void; tbInline?: boolean };
@@ -332,7 +338,7 @@ export function defineBlocks(): void {
         {
           type: 'field_dropdown',
           name: 'OP',
-          options: [['=', '==='], ['≠', '!=='], ['<', '<'], ['≤', '<='], ['>', '>'], ['≥', '>='], ['== (loose)', '=='], ['!= (loose)', '!=']],
+          options: [['=', '==='], ['≠', '!=='], ['<', '<'], ['≤', '<='], ['>', '>'], ['≥', '>='], ['== (loose)', '=='], ['!= (loose)', '!='], ['in (has key)', 'in'], ['instanceof (is a)', 'instanceof']],
         },
         { type: 'input_value', name: 'B' },
       ],
@@ -723,6 +729,18 @@ export function defineBlocks(): void {
   defineObjectLiteral();
   defineTypeShape();
   defineRawStatement();
+  // A file may have code after return / break / throw / process.exit (it never runs, but it is there):
+  // these blocks get a bottom connector too, so such a file still loads and nothing is lost.
+  for (const t of ['ts_stop', 'ts_return', 'ts_throw', 'controls_flow_statements']) {
+    const def = Blockly.Blocks[t] as { init: () => void; tbNext?: boolean };
+    if (!def || def.tbNext) continue;
+    const init = def.init;
+    def.init = function (this: Blockly.Block) {
+      init.call(this);
+      if (!this.nextConnection) this.setNextStatement(true);
+    };
+    def.tbNext = true;
+  }
 
   // Built-in control blocks are "logic" styled by default - recolor to Control.
   for (const type of ['controls_if', 'controls_whileUntil', 'controls_flow_statements']) {
@@ -823,49 +841,77 @@ function fireMutation(block: Blockly.Block, before: string, after: string) {
   Blockly.Events.fire(new (Blockly.Events.get(Blockly.Events.BLOCK_CHANGE))(block, 'mutation', null, before, after));
 }
 
-/** { name: (value), other: (value) } - an object, one row per property. */
+/**
+ * { name: (value), other: (value), greet() { ... } } - an object, one row per property.
+ * A row can also be a method: a small function that belongs to the object (inside, "this" is the object).
+ */
 function defineObjectLiteral(): void {
-  type ObjBlock = Blockly.Block & { count: number; updateShape(): void; resize(d: number): void };
+  type ObjBlock = Blockly.Block & { count: number; methods: Record<number, string>; updateShape(): void; resize(d: number, method?: boolean): void };
   Blockly.Blocks['ts_object'] = {
     init(this: ObjBlock) {
       this.count = 2;
+      this.methods = {};
       this.setOutput(true, null);
       this.setStyle('type_blocks');
-      this.setTooltip(tr('An object: named values that belong together, e.g. an order with an item name, a count and a price.'));
+      this.setTooltip(tr('An object: named values that belong together, e.g. an order with an item name, a count and a price. A row can also be a method - a function of the object.'));
       this.appendDummyInput('HEAD').appendField('{');
       this.updateShape();
     },
     saveExtraState(this: ObjBlock) {
-      return { count: this.count };
+      return Object.keys(this.methods).length ? { count: this.count, methods: this.methods } : { count: this.count };
     },
-    loadExtraState(this: ObjBlock, state: { count?: number }) {
+    loadExtraState(this: ObjBlock, state: { count?: number; methods?: Record<number, string> }) {
       this.count = state.count ?? 0;
+      this.methods = { ...(state.methods ?? {}) };
       this.updateShape();
     },
     updateShape(this: ObjBlock) {
-      if (this.getInput('TAIL')) this.removeInput('TAIL');
-      let i = 0;
-      while (this.getInput('V' + i)) {
-        if (i >= this.count) {
-          this.getInputTargetBlock('V' + i)?.unplug(false);
-          this.removeInput('V' + i);
-        }
-        i++;
+      // rebuild every row, keeping names and plugged-in blocks
+      const keep = new Map<string, string>();
+      const kids = new Map<string, Blockly.Block>();
+      for (const input of this.inputList) {
+        for (const f of input.fieldRow) if (f.name) keep.set(f.name, String(f.getValue()));
+        const t = input.connection?.targetBlock();
+        if (t) kids.set(input.name, t);
       }
+      for (const t of kids.values()) t.unplug(false);
+      for (const input of [...this.inputList]) if (input.name !== 'HEAD') this.removeInput(input.name);
       for (let k = 0; k < this.count; k++) {
-        if (!this.getInput('V' + k)) this.appendValueInput('V' + k).appendField(new Blockly.FieldTextInput(k ? 'key' + k : 'name'), 'K' + k).appendField(':');
+        const key = new Blockly.FieldTextInput(keep.get('K' + k) ?? (k ? 'key' + k : 'name'));
+        if (k in this.methods) {
+          const params = new Blockly.FieldTextInput(keep.get('P' + k) ?? this.methods[k] ?? '');
+          params.setValidator((v) => {
+            this.methods[k] = String(v);
+            return v;
+          });
+          this.appendDummyInput('R' + k).appendField(key, 'K' + k).appendField('(').appendField(params, 'P' + k).appendField(') {');
+          this.appendStatementInput('V' + k);
+          this.appendDummyInput('E' + k).appendField('}');
+        } else {
+          this.appendValueInput('V' + k).appendField(key, 'K' + k).appendField(':');
+        }
       }
       const tail = this.appendDummyInput('TAIL').appendField('}');
-      tail.appendField(new Blockly.FieldImage(ICONS.plus, 16, 16, 'add a property', () => this.resize(1)));
-      if (this.count > 0) tail.appendField(new Blockly.FieldImage(ICONS.minus, 16, 16, 'remove the last property', () => this.resize(-1)));
+      tail.appendField(new Blockly.FieldImage(ICONS.plus, 16, 16, tr('add a property'), () => this.resize(1)));
+      tail.appendField(new Blockly.FieldLabel(tr('method'), 'tbIndex'));
+      tail.appendField(new Blockly.FieldImage(ICONS.plus, 16, 16, tr('add a method'), () => this.resize(1, true)));
+      if (this.count > 0) tail.appendField(new Blockly.FieldImage(ICONS.minus, 16, 16, tr('remove the last row'), () => this.resize(-1)));
+      for (const [name, t] of kids) {
+        const input = this.getInput(name);
+        const conn = input?.connection;
+        const own = conn?.type === Blockly.ConnectionType.NEXT_STATEMENT ? t.previousConnection : t.outputConnection;
+        if (conn && own) conn.connect(own);
+      }
     },
-    resize(this: ObjBlock, delta: number) {
+    resize(this: ObjBlock, delta: number, method = false) {
       if (this.isInFlyout || this.isDeadOrDying()) return;
-      const before = JSON.stringify({ count: this.count });
+      const before = JSON.stringify(this.saveExtraState?.());
       Blockly.Events.setGroup(true);
+      if (delta > 0 && method) this.methods[this.count] = '';
       this.count = Math.max(0, this.count + delta);
+      for (const k of Object.keys(this.methods)) if (Number(k) >= this.count) delete this.methods[Number(k)];
       this.updateShape();
-      fireMutation(this, before, JSON.stringify({ count: this.count }));
+      fireMutation(this, before, JSON.stringify(this.saveExtraState?.()));
       Blockly.Events.setGroup(false);
     },
   };
@@ -901,7 +947,9 @@ function defineTypeShape(): void {
       this.appendDummyInput('HEAD')
         .appendField(`${this.exported ? 'export ' : ''}${this.kind}`)
         .appendField(new Blockly.FieldTextInput(keep.get('NAME') ?? 'Thing'), 'NAME')
-        .appendField(tr('has:'));
+        .appendField(tr('extends'))
+        .appendField(new BaseDropdown(keep.get('BASE') ?? NO_TYPE) as unknown as Blockly.Field, 'BASE')
+        .appendField(tr('and has:'));
       for (let k = 0; k < this.count; k++) {
         this.appendDummyInput('R' + k)
           .appendField('   ')
@@ -992,6 +1040,12 @@ export function buildToolbox(): Blockly.utils.toolbox.ToolboxDefinition {
           { kind: 'block', type: 'controls_whileUntil', fields: { MODE: 'UNTIL' } },
           { kind: 'block', type: 'controls_flow_statements' },
           { kind: 'block', type: 'ts_stop' },
+          { kind: 'label', text: tr('More loops:'), 'web-class': 'tbHint' } as never,
+          { kind: 'block', type: 'ts_for', fields: { OP: '<' }, inputs: { FROM: num(0), TO: num(10) } },
+          { kind: 'block', type: 'ts_do_while' },
+          { kind: 'label', text: tr('Errors:'), 'web-class': 'tbHint' } as never,
+          { kind: 'block', type: 'ts_try' },
+          { kind: 'block', type: 'ts_throw', inputs: { VALUE: { block: { type: 'ts_new', fields: { CLASS: 'Error' }, extraState: { count: 1 }, inputs: { ARG0: txt('Something is wrong') } } } } },
         ],
       },
       {
@@ -1000,6 +1054,7 @@ export function buildToolbox(): Blockly.utils.toolbox.ToolboxDefinition {
         categorystyle: 'console',
         contents: [
           { kind: 'block', type: 'ts_say', inputs: { TEXT: txt('Hello!') } },
+          { kind: 'block', type: 'ts_say_many', extraState: { count: 2 }, inputs: { ARG0: txt('Score:'), ARG1: num(42) } },
           { kind: 'block', type: 'ts_say_color', inputs: { TEXT: txt('Hello!') } },
           { kind: 'block', type: 'ts_ask', inputs: { TEXT: txt("What's your name?") } },
           { kind: 'block', type: 'ts_ask_number', inputs: { TEXT: txt('Pick a number') } },
@@ -1015,7 +1070,12 @@ export function buildToolbox(): Blockly.utils.toolbox.ToolboxDefinition {
           { kind: 'block', type: 'ts_arith', fields: { OP: '-' }, inputs: { A: num(5), B: num(2) } },
           { kind: 'block', type: 'ts_arith', fields: { OP: '*' }, inputs: { A: num(2), B: num(3) } },
           { kind: 'block', type: 'ts_arith', fields: { OP: '/' }, inputs: { A: num(10), B: num(2) } },
+          { kind: 'block', type: 'ts_arith', fields: { OP: '%' }, inputs: { A: num(7), B: num(2) } },
           { kind: 'block', type: 'ts_random', inputs: { FROM: num(1), TO: num(10) } },
+          { kind: 'block', type: 'ts_call', fields: { NAME: 'Math.floor' }, extraState: { count: 1 }, inputs: { ARG0: num(4.7) } },
+          { kind: 'block', type: 'ts_call', fields: { NAME: 'Math.max' }, extraState: { count: 2 }, inputs: { ARG0: num(3), ARG1: num(8) } },
+          { kind: 'block', type: 'ts_neg' },
+          { kind: 'block', type: 'ts_global', fields: { NAME: 'Math.PI' } },
           { kind: 'sep', gap: 24 },
           { kind: 'block', type: 'ts_compare', fields: { OP: '>' }, inputs: { B: num(50) } },
           { kind: 'block', type: 'ts_compare', fields: { OP: '<' }, inputs: { B: num(50) } },
@@ -1027,6 +1087,8 @@ export function buildToolbox(): Blockly.utils.toolbox.ToolboxDefinition {
           { kind: 'sep', gap: 24 },
           { kind: 'block', type: 'math_number' },
           { kind: 'block', type: 'logic_ternary' },
+          { kind: 'block', type: 'ts_literal', fields: { VALUE: 'undefined' } },
+          { kind: 'block', type: 'ts_literal', fields: { VALUE: 'null' } },
         ],
       },
       {
@@ -1043,6 +1105,18 @@ export function buildToolbox(): Blockly.utils.toolbox.ToolboxDefinition {
           { kind: 'block', type: 'ts_to_number', inputs: { VALUE: txt('42') } },
           { kind: 'block', type: 'ts_to_text', inputs: { VALUE: num(42) } },
           { kind: 'block', type: 'ts_list_split', inputs: { TEXT: txt('a,b,c'), SEP: txt(',') } },
+          { kind: 'label', text: tr('Text with values inside:'), 'web-class': 'tbHint' } as never,
+          { kind: 'block', type: 'ts_template', extraState: { count: 1 }, fields: { S0: 'Hello ', S1: '!' }, inputs: { V0: txt('Ema') } },
+          { kind: 'label', text: tr('Text methods (pick one from the list):'), 'web-class': 'tbHint' } as never,
+          { kind: 'block', type: 'ts_method', fields: { METHOD: 'slice' }, extraState: { count: 2 }, inputs: { OBJ: txt('Liberec'), ARG0: num(0), ARG1: num(3) } },
+          { kind: 'block', type: 'ts_method', fields: { METHOD: 'trim' }, extraState: { count: 0 }, inputs: { OBJ: txt('  hi  ') } },
+          { kind: 'block', type: 'ts_method', fields: { METHOD: 'padStart' }, extraState: { count: 2 }, inputs: { OBJ: txt('7'), ARG0: num(3), ARG1: txt('0') } },
+          { kind: 'block', type: 'ts_method', fields: { METHOD: 'indexOf' }, extraState: { count: 1 }, inputs: { OBJ: txt('apple'), ARG0: txt('p') } },
+          { kind: 'block', type: 'ts_method', fields: { METHOD: 'charCodeAt' }, extraState: { count: 1 }, inputs: { OBJ: txt('A'), ARG0: num(0) } },
+          { kind: 'block', type: 'ts_call', fields: { NAME: 'String.fromCodePoint' }, extraState: { count: 1 }, inputs: { ARG0: num(66) } },
+          { kind: 'block', type: 'ts_call', fields: { NAME: 'parseFloat' }, extraState: { count: 1 }, inputs: { ARG0: txt('3.5') } },
+          { kind: 'label', text: tr('Patterns:'), 'web-class': 'tbHint' } as never,
+          { kind: 'block', type: 'ts_method', fields: { METHOD: 'test' }, extraState: { count: 1 }, inputs: { OBJ: { block: { type: 'ts_regex', fields: { PATTERN: '^\\d{3}$', FLAGS: '' } } }, ARG0: txt('123') } },
         ],
       },
       { kind: 'category', name: tr('Variables'), categorystyle: 'variables', custom: 'TS_VARIABLES' },
@@ -1066,10 +1140,23 @@ export function buildToolbox(): Blockly.utils.toolbox.ToolboxDefinition {
           { kind: 'label', text: tr('Read or change a property:'), 'web-class': 'tbHint' } as never,
           { kind: 'block', type: 'ts_prop', fields: { PROP: 'count' } },
           { kind: 'block', type: 'ts_prop_set', fields: { PROP: 'paid' }, inputs: { VALUE: { block: { type: 'logic_boolean', fields: { BOOL: 'TRUE' } } } } },
+          { kind: 'block', type: 'ts_index', inputs: { KEY: txt('Ema') } },
+          { kind: 'block', type: 'ts_set_any', fields: { OP: '+=' }, inputs: { VALUE: num(1) } },
+          { kind: 'block', type: 'ts_literal', fields: { VALUE: 'this' } },
+          { kind: 'label', text: tr('Set (each value once) and Map (key -> value):'), 'web-class': 'tbHint' } as never,
+          { kind: 'block', type: 'ts_new', fields: { CLASS: 'Set' }, extraState: { count: 1 } },
+          { kind: 'block', type: 'ts_new', fields: { CLASS: 'Map' }, extraState: { count: 0 } },
+          { kind: 'block', type: 'ts_method_stmt', fields: { METHOD: 'set' }, extraState: { count: 2 }, inputs: { OBJ: { block: { type: 'variables_get', fields: { VAR: { name: 'scores' } } } }, ARG0: txt('Ema'), ARG1: num(10) } },
+          { kind: 'block', type: 'ts_method', fields: { METHOD: 'get' }, extraState: { count: 1 }, inputs: { OBJ: { block: { type: 'variables_get', fields: { VAR: { name: 'scores' } } } }, ARG0: txt('Ema') } },
+          { kind: 'block', type: 'ts_method', fields: { METHOD: 'has' }, extraState: { count: 1 }, inputs: { OBJ: { block: { type: 'variables_get', fields: { VAR: { name: 'scores' } } } }, ARG0: txt('Ema') } },
+          { kind: 'block', type: 'ts_foreach_pair', inputs: { LIST: { block: { type: 'variables_get', fields: { VAR: { name: 'scores' } } } } } },
+          { kind: 'block', type: 'ts_new', fields: { CLASS: 'Date' }, extraState: { count: 0 } },
           { kind: 'label', text: tr('Types:'), 'web-class': 'tbHint' } as never,
           { kind: 'block', type: 'ts_typeof', inputs: { VALUE: num(42) } },
           { kind: 'block', type: 'ts_is_type', inputs: { VALUE: txt('hi') } },
           { kind: 'block', type: 'ts_as' },
+          { kind: 'block', type: 'ts_type_union', fields: { NAME: 'Gender' }, extraState: { count: 3 }, inputs: { ARG0: txt('male'), ARG1: txt('female'), ARG2: txt('other') } },
+          { kind: 'block', type: 'ts_type_alias', fields: { NAME: 'Score', TYPE: 'number' } },
         ],
       },
       {
@@ -1077,6 +1164,9 @@ export function buildToolbox(): Blockly.utils.toolbox.ToolboxDefinition {
         name: tr('Code'),
         categorystyle: 'code',
         contents: [
+          { kind: 'block', type: 'ts_import' },
+          { kind: 'block', type: 'ts_call_stmt', fields: { NAME: 'console.error' }, extraState: { count: 1 }, inputs: { ARG0: txt('Oops') } },
+          { kind: 'block', type: 'ts_method_stmt', fields: { METHOD: 'push' }, extraState: { count: 1 } },
           { kind: 'block', type: 'ts_code_stmt' },
           { kind: 'block', type: 'ts_code_expr' },
           { kind: 'block', type: 'ts_for_raw' },

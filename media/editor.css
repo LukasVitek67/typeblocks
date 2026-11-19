@@ -655,3 +655,70 @@ body.vscode-light .rcCode .t-fn, body.vscode-high-contrast-light .rcCode .t-fn {
 .rcCard[data-g="math"] { --g: #2BA358; }
 .rcCard[data-g="functions"] { --g: #BE52C8; }
 @media (prefers-reduced-motion: reduce) { .rcNew > .blocklyPath { animation: none; } }
+
+/* ---------- block guide window ("What does this block do?") ---------- */
+#tbHelp {
+  position: fixed; inset: 0; z-index: 200;
+  display: grid; place-items: center; padding: 16px;
+  background: color-mix(in srgb, #000 45%, transparent);
+}
+#tbHelp[hidden] { display: none; }
+.hpCard {
+  width: min(1000px, 100%); max-height: calc(100vh - 32px);
+  display: flex; flex-direction: column; gap: 10px;
+  background: var(--panel); color: var(--fg);
+  border: 1px solid var(--line); border-radius: 14px;
+  padding: 16px 18px 18px; overflow: auto;
+  box-shadow: 0 24px 64px #0006;
+}
+.hpHead { display: flex; align-items: center; gap: 10px; }
+.hpSwatch { width: 14px; height: 28px; border-radius: 4px; flex: none; }
+.hpHead h2 { margin: 0; font-size: 18px; line-height: 1.25; }
+.hpClose {
+  margin-left: auto; width: 32px; height: 32px; border: 0; border-radius: 8px;
+  background: transparent; color: var(--fg); font-size: 22px; line-height: 1; cursor: pointer;
+}
+.hpClose:hover { background: color-mix(in srgb, var(--fg) 10%, transparent); }
+.hpText { margin: 0; font-size: 14px; line-height: 1.55; max-width: 72ch; }
+.hpLab { display: grid; grid-template-columns: 3fr 2fr; gap: 12px; min-height: 0; }
+.hpLab[hidden] { display: none; }
+.hpLabel { font-size: 11.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); margin: 0 0 6px; }
+.hpBlocks { height: min(46vh, 380px); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.hpCode {
+  margin: 0; height: min(46vh, 380px); overflow: auto; padding: 10px 12px;
+  border: 1px solid var(--line); border-radius: 10px;
+  background: var(--bg); font: 12.5px/1.6 var(--mono); white-space: pre;
+}
+.hpCode .ln { display: inline-block; min-width: 100%; border-radius: 3px; }
+.hpCode .ln.on { background: color-mix(in srgb, #ffd54a 22%, transparent); }
+.hpCode .t-kw { color: #c678dd; } .hpCode .t-str { color: #98c379; } .hpCode .t-num { color: #d19a66; }
+.hpCode .t-type { color: #61afef; } .hpCode .t-fn { color: #82aaff; } .hpCode .t-com { color: #8a8f9c; } .hpCode .t-op { color: var(--muted); }
+body.vscode-light .hpCode .t-kw { color: #a626a4; } body.vscode-light .hpCode .t-str { color: #2b8a3e; }
+body.vscode-light .hpCode .t-num { color: #b45309; } body.vscode-light .hpCode .t-type { color: #0f6fb8; } body.vscode-light .hpCode .t-fn { color: #3355cc; }
+.hpBar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.hpBar button {
+  font: 600 13px var(--font); padding: 8px 14px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--line); background: transparent; color: var(--fg);
+}
+.hpBar .hpRun { background: var(--run); border-color: var(--run); color: #fff; }
+.hpBar .hpRun:hover { background: var(--run-hi); }
+.hpBar button[hidden] { display: none; }
+.hpTip { margin: 0 0 0 6px; font-size: 13px; color: var(--muted); }
+.hpTip b { color: var(--fg); }
+.hpOut { border: 1px solid var(--line); border-radius: 10px; background: #14161a; padding: 10px 12px; }
+.hpOut[hidden] { display: none; }
+.hpOutText { margin: 0; max-height: 180px; overflow: auto; color: #e6e8eb; font: 12.5px/1.55 var(--mono); white-space: pre-wrap; }
+.hpOutText .err { color: #ff8a80; } .hpOutText .warn { color: #ffd54a; } .hpOutText .echo { color: #8fd18f; } .hpOutText .q { color: #9ecbff; }
+.hpOutText .c-red { color: #ff6b6b; } .hpOutText .c-green { color: #5fd38d; } .hpOutText .c-yellow { color: #ffd54a; }
+.hpOutText .c-blue { color: #6cb6ff; } .hpOutText .c-magenta { color: #e18bf0; } .hpOutText .c-cyan { color: #5fd7e0; }
+.hpAsk { display: flex; gap: 6px; margin-top: 6px; }
+.hpAsk[hidden] { display: none; }
+.hpAsk input { flex: 1; font: 13px var(--mono); padding: 6px 8px; border-radius: 6px; border: 1px solid #ffffff2a; background: #0d0f12; color: #fff; }
+.hpAsk button { border: 0; border-radius: 6px; padding: 0 12px; background: var(--run); color: #fff; cursor: pointer; }
+.hpNoRun { margin: 0; font-size: 13px; color: var(--muted); }
+.hpNoRun[hidden] { display: none; }
+.hpClose:focus-visible, .hpBar button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+@media (max-width: 720px) {
+  .hpLab { grid-template-columns: 1fr; }
+  .hpBlocks, .hpCode { height: 260px; }
+}

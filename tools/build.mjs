@@ -24,7 +24,7 @@ writeIcon(r('media/icon.png'), 128);
 // ---- converter module (preview page, guide and recipes use it) ----
 const page = await esbuild.build({
   stdin: {
-    contents: "export * from './src/page'; export * from './src/convert/tsToBlocks'; export * from './src/starter'; export * from './src/guide/content'; export * from './src/guide/content.en'; export * from './src/guide/page'; export * from './src/presets';",
+    contents: "export * from './src/page'; export * from './src/convert/tsToBlocks'; export * from './src/starter'; export * from './src/guide/content'; export * from './src/guide/content.en'; export * from './src/guide/page'; export * from './src/presets'; export * from './src/blockHelp';",
     resolveDir: root,
     loader: 'ts',
   },
@@ -50,6 +50,18 @@ const presetData = { groups: mod.PRESET_GROUPS, presets: mod.PRESETS.map((p) => 
   return out;
 }) };
 fs.writeFileSync(r('src/webview/presets.data.json'), JSON.stringify(presetData));
+
+// ---- block guides: every example converted to blocks, bundled into the webview ----
+const helpData = {};
+for (const hlp of mod.BLOCK_HELP) {
+  const ws = mod.tsToBlocks(hlp.code).workspace;
+  const json = JSON.stringify(ws);
+  if (!hlp.raw && RAW.test(json)) throw new Error('block guide ' + hlp.type + ' has a raw-code block');
+  const uses = hlp.type === 'procedures_defreturn' ? 'procedures_defnoreturn' : hlp.type; // files always become the plain function block
+  if (!json.includes('"type":"' + uses + '"')) throw new Error('block guide ' + hlp.type + ': the example does not use that block');
+  helpData[hlp.type] = { cs: hlp.cs, en: hlp.en, code: hlp.code, run: hlp.run !== false, workspace: ws };
+}
+fs.writeFileSync(r('src/webview/help.data.json'), JSON.stringify(helpData));
 
 // ---- bundles ----
 const common = { bundle: true, sourcemap: !minify, minify, logLevel: 'info' };

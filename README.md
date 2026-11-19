@@ -43,6 +43,10 @@ The layout button in the console header puts it **at the bottom (full width)**, 
 - **One click** on a block on the left puts it in; dragging works as usual.
 - **Types are picked from a list** (text, number, yes/no, arrays, your own types) - never typed by hand.
 
+### A guide for every block
+
+Right-click **any** block (also one on the left side) -> **What does this block do?** A window explains it in plain words, shows a small example you can change, the TypeScript it makes (live, the lines of the selected block light up) and a **Run** button - the example runs right in the window. Every block type has one (tested).
+
 ### Recipes
 
 The **Recipes** category at the top opens ready-made little programs: arrays (make, go through, filter, map, add up, find the biggest), math (calculator, what is calculated first, even/odd, average, dice, ask for a number) and functions that calculate (add, area, is it even, average, °C to °F). Every recipe explains in plain words what it does, shows its blocks and its TypeScript, and gives a *Try:* idea. **Insert** puts it under your program.
@@ -56,6 +60,13 @@ The **Recipes** category at the top opens ready-made little programs: arrays (ma
 - text: `+`, `.length`, `.includes`, `.toUpperCase()`, `.split()`, `String()`, `Number()`
 - objects `{ name: value }`, properties (`order.count`, `order.paid = true`), `type` / `interface` shapes, `export`
 - comments (`// ...`, also at the end of a line) and blank lines are kept
+- **calling anything**: `Math.floor(x)`, `parseFloat(t)`, `askNumber(...)` from another file, a function parameter - and **methods** of any value: `text.slice(0, 3)`, `.padStart`, `.charCodeAt`, `set.has(x)`, `map.get(k)` ... (picked from an explained list)
+- `console.log(a, b, c)`, template text `` `Hi ${name}` ``, `new Set / Map / Date / Error`, arrow functions `(a, b) => a - b`, `x[key]`, `+=` / `++` on anything
+- `try / catch`, `throw`, `do ... while`, the classic `for (let i = 0; i < list.length; i++)`, `for (const [key, value] of map)`
+- `undefined`, `null`, `NaN`, `this`, regular expressions `/\d+/`, `...spread`, `await`, `import { ... } from "..."`
+- types: `type Gender = "male" | "female"`, `type Student = Human & { ... }`, `interface X extends Y`, optional fields and methods (`name(): string`), objects with methods (`name() { return this.givenName; }`)
+
+Checked against real school assignments (strings, regex, Morse code, collections with Map / Set / Record, functions, objects with methods): every one of their files becomes blocks.
 
 ### Arrays - made easy
 
@@ -67,7 +78,7 @@ The **Recipes** category at the top opens ready-made little programs: arrays (ma
 
 ### Everything else
 
-Classes, imports, template strings, ... are shown as grey **TS code** blocks with the original text (click the pencil to edit). Nothing is ever lost.
+Classes and the few other things without a block are shown as grey **TS code** blocks with the original text (click the pencil to edit). Nothing is ever lost.
 
 The file keeps its own style: indentation (2 or 4 spaces, tabs), quote style, comments, blank lines and how method chains are split. Parts that became blocks always end with `;`.
 

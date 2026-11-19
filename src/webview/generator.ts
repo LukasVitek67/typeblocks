@@ -35,6 +35,9 @@ interface Meta {
   exported?: boolean;
   ret?: string;
   types?: string[];
+  bare?: boolean;
+  noVar?: boolean;
+  hasFinally?: boolean;
 }
 
 export function meta(block: Blockly.Block): Meta {
@@ -83,6 +86,8 @@ export class TsGenerator extends JavascriptGenerator {
       [MUL_LEFT, Order.EXPONENTIATION],
       [MUL_RIGHT, Order.EXPONENTIATION],
       [POW_RIGHT, Order.EXPONENTIATION],
+      // const f = (x) => x * 2  needs no ( ) around the arrow function
+      [Order.ASSIGNMENT, Order.ASSIGNMENT],
     );
     // Browser globals (name, status, ...) are fine in a Node program, so use our own list.
     this.RESERVED_WORDS_ = '';
@@ -544,6 +549,146 @@ export interface Output {
   ts: string;
   spans: LineSpan[];
 }
+
+// ---------------------------------------------------------------- more blocks (blocksMore.ts)
+
+/** The values in the ARG0..ARGn slots of a block with a growing list of slots. */
+function slotArgs(g: TsGenerator, b: Blockly.Block, order: Order = Order.COMMA): string[] {
+  const n = (b as unknown as { count?: number }).count ?? 0;
+  return Array.from({ length: n }, (_, i) => val(g, b, 'ARG' + i, order, 'undefined'));
+}
+
+/** "a: number, b: string" -> "a, b" (for the plain JavaScript the guide runs). */
+export function stripParamTypes(params: string): string {
+  const parts: string[] = [];
+  let depth = 0;
+  let cur = '';
+  for (const ch of params) {
+    if ('<([{'.includes(ch)) depth++;
+    if ('>)]}'.includes(ch)) depth--;
+    if (ch === ',' && depth === 0) {
+      parts.push(cur);
+      cur = '';
+    } else cur += ch;
+  }
+  if (cur.trim()) parts.push(cur);
+  return parts
+    .map((p) => {
+      let d = 0;
+      for (let i = 0; i < p.length; i++) {
+        const ch = p[i];
+        if ('<([{'.includes(ch)) d++;
+        if ('>)]}'.includes(ch)) d--;
+        if (ch === ':' && d === 0) return p.slice(0, i).replace(/\?$/, '').trim();
+      }
+      return p.trim();
+    })
+    .join(', ');
+}
+
+const params = (g: TsGenerator, raw: unknown) => {
+  const p = String(raw ?? '').trim();
+  return g.typed ? p : stripParamTypes(p);
+};
+
+/** `text` - a backtick that is not escaped would end the text early. */
+const tplPart = (s: unknown) => String(s ?? '').replace(/(^|[^\\])`/g, '$1\\`');
+
+Object.assign(OVERRIDES, {
+  ts_say_many: G((b, g) => `console.${b.getFieldValue('FN') || 'log'}(${slotArgs(g, b).join(', ')});\n`),
+  ts_template: G((b, g) => {
+    const n = (b as unknown as { count?: number }).count ?? 0;
+    let out = '`' + tplPart(b.getFieldValue('S0'));
+    for (let i = 0; i < n; i++) out += '${' + val(g, b, 'V' + i, Order.NONE, '""') + '}' + tplPart(b.getFieldValue('S' + (i + 1)));
+    return [out + '`', Order.ATOMIC];
+  }),
+  ts_call: G((b, g) => [`${String(b.getFieldValue('NAME') || 'f').trim()}(${slotArgs(g, b).join(', ')})`, Order.FUNCTION_CALL]),
+  ts_call_stmt: G((b, g) => `${String(b.getFieldValue('NAME') || 'f').trim()}(${slotArgs(g, b).join(', ')});\n`),
+  ts_method: G((b, g) => [`${val(g, b, 'OBJ', Order.MEMBER, '""')}.${String(b.getFieldValue('METHOD') || 'toString').trim()}(${slotArgs(g, b).join(', ')})`, Order.FUNCTION_CALL]),
+  ts_method_stmt: G((b, g) => `${val(g, b, 'OBJ', Order.MEMBER, '""')}.${String(b.getFieldValue('METHOD') || 'toString').trim()}(${slotArgs(g, b).join(', ')});\n`),
+  ts_new: G((b, g) => {
+    const cls = String(b.getFieldValue('CLASS') || 'Object').trim();
+    return [`new ${g.typed ? cls : cls.replace(/<[\s\S]*>$/, '')}(${slotArgs(g, b).join(', ')})`, Order.ATOMIC]; // new X(...) needs no ( ) around it, even before .method()
+  }),
+  ts_arrow: G((b, g) => {
+    const m = meta(b);
+    let v = val(g, b, 'VALUE', Order.ASSIGNMENT, 'undefined');
+    if (v.startsWith('{')) v = `(${v})`;
+    const p = params(g, b.getFieldValue('PARAMS'));
+    const head = m.bare && /^[A-Za-z_$][\w$]*$/.test(p) ? p : `(${p})`;
+    return [`${m.async ? 'async ' : ''}${head} => ${v}`, Order.ASSIGNMENT];
+  }),
+  ts_arrow_block: G((b, g) => {
+    const m = meta(b);
+    const p = params(g, b.getFieldValue('PARAMS'));
+    const head = m.bare && /^[A-Za-z_$][\w$]*$/.test(p) ? p : `(${p})`;
+    return [`${m.async ? 'async ' : ''}${head} => {\n${g.statementToCode(b, 'DO')}}`, Order.ASSIGNMENT];
+  }),
+  ts_index: G((b, g) => [`${val(g, b, 'OBJ', Order.MEMBER, '[]')}[${val(g, b, 'KEY', Order.NONE, '0')}]`, Order.MEMBER]),
+  ts_set_any: G((b, g) => {
+    const op = String(b.getFieldValue('OP') || '=');
+    const t = val(g, b, 'TARGET', Order.MEMBER, 'x');
+    if (op === '++' || op === '--') return `${t}${op};\n`;
+    return `${t} ${op} ${val(g, b, 'VALUE', Order.ASSIGNMENT, 'undefined')};\n`;
+  }),
+  ts_try: G((b, g) => {
+    const head = meta(b).noVar ? 'catch' : `catch (${g.varName(b, 'VAR')})`;
+    return `try {\n${g.statementToCode(b, 'TRY')}} ${head} {\n${g.statementToCode(b, 'CATCH')}}\n`;
+  }),
+  ts_throw: G((b, g) => `throw ${val(g, b, 'VALUE', Order.NONE, 'new Error("Error")')};\n`),
+  ts_do_while: G((b, g) => `do {\n${g.statementToCode(b, 'DO')}} while (${val(g, b, 'COND', Order.NONE, 'false')});\n`),
+  ts_for: G((b, g) => {
+    const v = g.varName(b, 'VAR');
+    return `for (let ${v} = ${val(g, b, 'FROM', Order.ASSIGNMENT, '0')}; ${v} ${b.getFieldValue('OP')} ${val(g, b, 'TO', Order.RELATIONAL, '0')}; ${v}${b.getFieldValue('STEP')}) {\n${g.statementToCode(b, 'DO')}}\n`;
+  }),
+  ts_foreach_pair: G((b, g) => {
+    const kind = meta(b).kind === 'let' ? 'let' : 'const';
+    return `for (${kind} [${g.varName(b, 'K')}, ${g.varName(b, 'V')}] of ${val(g, b, 'LIST', Order.NONE, '[]')}) {\n${g.statementToCode(b, 'DO')}}\n`;
+  }),
+  ts_literal: G((b) => [String(b.getFieldValue('VALUE') || 'undefined'), Order.ATOMIC]),
+  ts_global: G((b) => [String(b.getFieldValue('NAME') || 'Math.PI').trim(), Order.MEMBER]),
+  ts_neg: G((b, g) => [`-${val(g, b, 'VALUE', Order.UNARY_NEGATION, '0')}`, Order.UNARY_NEGATION]),
+  ts_regex: G((b) => [`/${String(b.getFieldValue('PATTERN') ?? '')}/${String(b.getFieldValue('FLAGS') ?? '').trim()}`, Order.ATOMIC]),
+  ts_spread: G((b, g) => [`...${val(g, b, 'VALUE', Order.ASSIGNMENT, '[]')}`, Order.ATOMIC]),
+  ts_await: G((b, g) => [`await ${val(g, b, 'VALUE', Order.AWAIT, 'undefined')}`, Order.AWAIT]),
+  ts_import: G((b, g) => (g.typed ? `import ${String(b.getFieldValue('WHAT') ?? '').trim()} from ${g.quote_(String(b.getFieldValue('FROM') ?? ''))};\n` : '')),
+  ts_type_alias: G((b, g) => {
+    if (!g.typed) return '';
+    const exp = meta(b).exported ? 'export ' : '';
+    return `${exp}type ${safeName(String(b.getFieldValue('NAME') ?? 'T'))} = ${String(b.getFieldValue('TYPE') ?? 'any').trim() || 'any'};\n`;
+  }),
+  ts_type_union: G((b, g) => {
+    if (!g.typed) return '';
+    const exp = meta(b).exported ? 'export ' : '';
+    const items = slotArgs(g, b, Order.NONE);
+    return `${exp}type ${safeName(String(b.getFieldValue('NAME') ?? 'T'))} = ${items.join(' | ') || 'never'};\n`;
+  }),
+  ts_type: G((block, g) => {
+    const b = block as unknown as { count: number; kind: string; exported: boolean };
+    if (!g.typed) return '';
+    const rows = Array.from({ length: b.count ?? 0 }, (_, i) => `${g.INDENT}${String(block.getFieldValue('N' + i) ?? '').trim()}: ${String(block.getFieldValue('T' + i) ?? 'any').trim() || 'any'};`);
+    const name = safeName(String(block.getFieldValue('NAME') ?? 'Thing'));
+    const base = String(block.getFieldValue('BASE') ?? '-').trim();
+    const exp = b.exported ? 'export ' : '';
+    const body = rows.length ? `{\n${rows.join('\n')}\n}` : '{}';
+    if (b.kind === 'interface') return `${exp}interface ${name}${base && base !== '-' ? ' extends ' + base : ''} ${body}\n`;
+    return `${exp}type ${name} = ${base && base !== '-' ? base + ' & ' : ''}${body};\n`;
+  }),
+  ts_object: G((block, g) => {
+    const b = block as unknown as { count: number; methods?: Record<number, string> };
+    const n = b.count ?? 0;
+    const methods = b.methods ?? {};
+    const entries = Array.from({ length: n }, (_, i) => {
+      const key = keyName(block.getFieldValue('K' + i));
+      if (i in methods) return `${key}(${params(g, block.getFieldValue('P' + i) ?? methods[i])}) {\n${g.statementToCode(block, 'V' + i)}}`;
+      return `${key}: ${val(g, block, 'V' + i, Order.COMMA, 'undefined')}`;
+    });
+    if (!entries.length) return ['{}', Order.ATOMIC];
+    const one = `{ ${entries.join(', ')} }`;
+    if (one.length <= 80 && !one.includes('\n')) return [one, Order.ATOMIC];
+    return [`{\n${entries.map((e) => g.prefixLines(e, g.INDENT) + ',').join('\n')}\n}`, Order.ATOMIC];
+  }),
+});
 
 const gen = new TsGenerator();
 

@@ -36,9 +36,9 @@ export function collectTypes(state: unknown): void {
     if (!v || typeof v !== 'object') return;
     if (Array.isArray(v)) return v.forEach(visit);
     const o = v as Record<string, unknown>;
-    if (typeof o.type === 'string' && /^(ts_let|ts_as|ts_type)$/.test(o.type) && o.fields && typeof o.fields === 'object') {
+    if (typeof o.type === 'string' && /^(ts_let|ts_as|ts_type|ts_type_alias)$/.test(o.type) && o.fields && typeof o.fields === 'object') {
       for (const [k, val] of Object.entries(o.fields as Record<string, unknown>)) {
-        if ((k === 'TYPE' || /^T\d+$/.test(k)) && typeof val === 'string') addType(val);
+        if ((k === 'TYPE' || k === 'BASE' || /^T\d+$/.test(k)) && typeof val === 'string') addType(val);
       }
     }
     for (const val of Object.values(o)) visit(val);
@@ -56,6 +56,7 @@ function shapeNames(): string[] {
   if (!workspace) return [];
   return workspace
     .getBlocksByType('ts_type', false)
+    .concat(workspace.getBlocksByType('ts_type_union', false), workspace.getBlocksByType('ts_type_alias', false))
     .map((b) => String(b.getFieldValue('NAME') ?? '').trim())
     .filter((n) => /^[A-Za-z_$][\w$]*$/.test(n));
 }
@@ -102,7 +103,9 @@ export class TypeDropdown extends Blockly.FieldDropdown {
   }
   /** On the block itself the automatic type is just "auto" - the long explanation stays in the menu. */
   protected override getText_(): string | null {
-    return this.getValue() === NO_TYPE ? tr('auto') : super.getText_();
+    // always the label of the real value (a type the list does not know yet must not show as another one)
+    const v = String(this.getValue() ?? '');
+    return v === NO_TYPE ? tr('auto') : typeLabel(v);
   }
 }
 
@@ -121,4 +124,19 @@ export function registerTypeExtension(): void {
       break;
     }
   });
+}
+
+/** "extends ..." for a type: nothing, or one of the types. */
+export class BaseDropdown extends TypeDropdown {
+  constructor(value: string) {
+    super(function (this: Blockly.FieldDropdown) {
+      const current = this?.getValue?.();
+      if (typeof current === 'string') addType(current);
+      return [[tr('nothing'), NO_TYPE] as [string, string], ...typeValues(false).filter((v) => !v.endsWith('[]')).map((v) => [typeLabel(v), v] as [string, string])];
+    });
+    this.setValue(value || NO_TYPE);
+  }
+  protected override getText_(): string | null {
+    return this.getValue() === NO_TYPE ? tr('nothing') : String(this.getValue());
+  }
 }

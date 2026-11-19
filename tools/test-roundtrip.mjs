@@ -196,7 +196,123 @@ const PARENS = [
   "",
 ].join("\n");
 
+// Everything the school assignments (P2A PRG 2026) use: strings, Map/Set, templates, try/catch,
+// do-while, the general for loop, union types, extends, objects with methods, arrow functions ...
+const SCHOOL = `type Gender = "male" | "female" | "other";
+
+type Contact = {
+  phone: string;
+  email: string;
+};
+
+type Human = {
+  givenName: string;
+  middleName?: string;
+  gender: Gender;
+  name(): string;
+};
+
+type Student = Human & {
+  grades: number[];
+  averageGrade(): number | null;
+};
+
+interface Human2 {
+  givenName: string;
+}
+
+interface Student2 extends Human2 {
+  grades: number[];
+}
+
+type Score = number | null;
+
+function jeKladne(n: number): boolean {
+  return n > 0;
+}
+
+function pocetSplnujicich(hodnoty: number[], podminka: (hodnota: number) => boolean): number {
+  let pocet = 0;
+  for (const hodnota of hodnoty) {
+    if (podminka(hodnota)) {
+      pocet++;
+    }
+  }
+  return pocet;
+}
+
+function median(hodnoty: number[]): number | null {
+  if (hodnoty.length === 0) {
+    return null;
+  }
+  const serazene = hodnoty.slice().sort((a, b) => a - b);
+  const stred = Math.floor(serazene.length / 2);
+  return serazene.length % 2 === 0 ? (serazene[stred - 1] + serazene[stred]) / 2 : serazene[stred];
+}
+
+const text = "Ahoj! Jak se mas?";
+const counts = new Map<string, number>();
+for (const ch of text.toLowerCase()) {
+  counts.set(ch, (counts.get(ch) ?? 0) + 1);
+}
+for (const [znak, pocet] of counts) {
+  if (znak === "a") {
+    console.log(znak.padEnd(3, " "), String(pocet).padStart(3, "0"), znak.charCodeAt(0).toString(16).padStart(4, "0"));
+  }
+}
+const unikatni = new Set(text.split(""));
+console.log("Ruznych znaku:", unikatni.size, [...unikatni].length);
+console.log(\`Pocet slov: \${text.split(/\\s+/).length}\`);
+const morse: Record<string, string> = { a: ".-", b: "-..." };
+let vysledek = "";
+for (const ch of "abx") {
+  try {
+    if (morse[ch] === undefined) {
+      throw new Error("neplatny znak " + ch);
+    }
+    vysledek += morse[ch] + " ";
+  } catch (e) {
+    console.log("Chyba:", (e as Error).message);
+  }
+}
+console.log(vysledek.trim());
+console.log(/^\\d{3} \\d{3} \\d{3}$/.test("111 222 333"), "Liberec".slice(0, 3), "a" in morse);
+const ema: Student = {
+  givenName: "Ema",
+  gender: "female",
+  grades: [1, 2, 2],
+  name() {
+    return this.givenName;
+  },
+  averageGrade() {
+    return this.grades.length ? this.grades.reduce((s, g) => s + g, 0) / this.grades.length : null;
+  },
+};
+console.log(ema.name(), ema.averageGrade(), pocetSplnujicich([3, -1, 4], jeKladne), pocetSplnujicich([1, 2, 3], (h) => h > 1), median([5, 1, 3, 2]));
+let i = 10;
+do {
+  i -= 3;
+} while (i > 0);
+for (let k = 3; k > 0; k--) {
+  process.stdout.write(String(k));
+}
+for (let k = 0; k < text.length; k++) {
+  if (text[k] === "!") {
+    console.log(" vykricnik na", k);
+  }
+}
+console.log(i, Math.max(...[4, 9, 2]), -i, Number.isNaN(Number("x")), new Date(2026, 0, 1).getFullYear(), Object.keys(morse).join(","));
+`;
+
 const cases = [
+  {
+    name: 'school assignments',
+    src: SCHOOL,
+    stdin: '',
+    exact: true,
+    noRaw: true,
+    expect: ['a   003 0061', 'Ruznych znaku: 13 13', 'Pocet slov: 4', 'Chyba: neplatny znak x', '.- -...', 'true Lib true', 'Ema 1.6666666666666667 2 2 2.5', '321 vykricnik na 4', '-2 9 2 true 2026 a,b'],
+  },
   { name: "parentheses", src: PARENS, stdin: "", exact: true, noRaw: true, expect: ["Za 10 let: 22", "10\n8\n26\n6\n2\n512\n64\n4\na12\n3a"] },
   { name: 'bufet (screenshot)', src: BUFET, stdin: '', noRaw: true, exact: true, append: BUFET_CHECK, expect: ['some true', 'map 12,25,20', 'filter mleko', 'reduce 32'], keep: ['    return objednavky.some((objednavka) => !objednavka.zaplaceno);', 'export type Objednavka = {', '        .reduce((celkem, objednavka) => celkem + objednavka.pocet * objednavka.cenaZaKus, 0);'] },
   { name: 'array methods + tabs + single quotes', src: METHODS, stdin: '', keep: ["\tconsole.log(p.name + ' is ' + p.age);", "const pets: Pet[] = [{ name: 'Rex', age: 3 }, { name: 'Mia', age: 7 }];", 'const total = pets.reduce((sum, p) => sum + p.age, 0);'], expect: ['Rex is 3', 'Mia is 7', '3\n7', 'Rex|Mia Mia 1 true 10 4 2'] },
@@ -289,6 +405,62 @@ for (const c of cases) {
     }
   if (bad) failed++;
   else console.log(`ok   recipes  (${PRESETS.length} x 2 languages)`);
+}
+// block guides: every block type has one; each example keeps its code and runs like in the help window
+{
+  const hb = await esbuild.build({ entryPoints: [path.join(root, 'src/blockHelp.ts')], bundle: true, platform: 'node', format: 'cjs', write: false });
+  const hbFile = path.join(tmp, 'blockHelp.cjs');
+  fs.writeFileSync(hbFile, hb.outputFiles[0].text);
+  const { BLOCK_HELP } = require(hbFile);
+  const { generateJs } = require(modFile);
+  const have = new Set(BLOCK_HELP.map((x) => x.type));
+  const builtins = ['controls_if', 'controls_whileUntil', 'controls_flow_statements', 'logic_boolean', 'logic_ternary', 'math_number', 'text', 'variables_get', 'variables_set', 'math_change', 'procedures_defnoreturn', 'procedures_defreturn', 'procedures_callreturn', 'procedures_callnoreturn'];
+  const missing = [...Object.keys(Blockly.Blocks).filter((k) => k.startsWith('ts_')), ...builtins].filter((t) => !have.has(t));
+  let bad = 0;
+  if (missing.length) {
+    bad++;
+    console.log('FAIL block guides missing for: ' + missing.join(', '));
+  }
+  const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+  class Stop extends Error {}
+  for (const hlp of BLOCK_HELP) {
+    const problems = [];
+    const a = roundTrip(hlp.code);
+    const norm = (t) => t.split('// ---- TypeBlocks helpers')[0].replace(/\n\s*\n/g, '\n').trim();
+    if (norm(a.ts) !== norm(hlp.code)) problems.push('blocks write different code:\n' + diff(norm(hlp.code), norm(a.ts)));
+    if (!hlp.raw && a.raw) problems.push(`${a.raw} raw-code blocks`);
+    if (hlp.run !== false) {
+      const conv = tsToBlocks(hlp.code);
+      const ws = new Blockly.Workspace();
+      Blockly.serialization.workspaces.load(conv.workspace, ws);
+      const js = generateJs(ws);
+      ws.dispose();
+      const out = [];
+      const timers = [];
+      try {
+        const fn = new AsyncFunction('console', 'ask', 'sleep', 'sayColored', 'process', 'setInterval', `"use strict";\n${js}`);
+        const con = { log: (...v) => out.push(v.join(' ')), error: (...v) => out.push(v.join(' ')), warn: () => {}, table: () => {} };
+        const proc = { exit: () => { throw new Stop(); }, stdout: { write: (t) => out.push(String(t)) } };
+        const every = (f, ms) => {
+          const run = async () => { try { for (let k = 0; k < 5; k++) await f(); } catch (e) { if (!(e instanceof Stop)) throw e; } };
+          timers.push(run());
+          return 0;
+        };
+        await fn(con, async () => '5', async () => {}, (v) => out.push(String(v)), proc, every);
+        await Promise.all(timers);
+        await new Promise((r) => setTimeout(r, 0));
+      } catch (e) {
+        if (!(e instanceof Stop)) problems.push('does not run: ' + (e && e.message));
+      }
+      if (!out.length) problems.push('prints nothing');
+    }
+    if (problems.length) {
+      bad++;
+      console.log(`FAIL guide ${hlp.type}\n  - ${problems.join('\n  - ')}`);
+    }
+  }
+  if (bad) failed++;
+  else console.log(`ok   block guides  (${BLOCK_HELP.length}, every block type)`);
 }
 console.log(failed ? `${failed} FAILED` : 'all passed');
 if (!failed) fs.rmSync(tmp, { recursive: true, force: true });

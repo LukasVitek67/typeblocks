@@ -41,6 +41,8 @@ const COMPARE = new Map<ts.SyntaxKind, string>([
   [ts.SyntaxKind.LessThanEqualsToken, '<='],
   [ts.SyntaxKind.GreaterThanToken, '>'],
   [ts.SyntaxKind.GreaterThanEqualsToken, '>='],
+  [ts.SyntaxKind.InKeyword, 'in'],
+  [ts.SyntaxKind.InstanceOfKeyword, 'instanceof'],
 ]);
 const LOGIC = new Map<ts.SyntaxKind, string>([
   [ts.SyntaxKind.AmpersandAmpersandToken, '&&'],
@@ -176,6 +178,9 @@ class Converter {
     const visit = (n: ts.Node) => {
       if ((ts.isVariableDeclaration(n) || ts.isParameter(n)) && ts.isIdentifier(n.name)) this.declared.add(n.name.text);
       if (ts.isCatchClause(n) && n.variableDeclaration && ts.isIdentifier(n.variableDeclaration.name)) this.declared.add(n.variableDeclaration.name.text);
+      // names from imports and from [key, value] in for...of are ours too
+      if ((ts.isImportSpecifier(n) || ts.isImportClause(n) || ts.isNamespaceImport(n)) && n.name) this.declared.add(n.name.text);
+      if (ts.isBindingElement(n) && ts.isIdentifier(n.name)) this.declared.add(n.name.text);
       if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name)) {
         const t = n.type?.getText(this.sf) ?? '';
         if (/\[\]$|^Array</.test(t) || (n.initializer && ts.isArrayLiteralExpression(n.initializer))) this.arrays.add(n.name.text);
@@ -431,25 +436,40 @@ class Converter {
 
     if (ts.isExpressionStatement(s)) return this.expressionStatement(s.expression);
 
-    if ((ts.isTypeAliasDeclaration(s) && ts.isTypeLiteralNode(s.type) && !s.typeParameters) || (ts.isInterfaceDeclaration(s) && !s.typeParameters && !s.heritageClauses)) {
+    if (ts.isImportDeclaration(s) && s.importClause && ts.isStringLiteral(s.moduleSpecifier) && !s.attributes) {
+      return this.block('ts_import', { fields: { WHAT: this.textOf(s.importClause).replace(/\s+/g, ' '), FROM: s.moduleSpecifier.text } });
+    }
+
+    // type X = { ... }, type X = Base & { ... }, interface X (extends Base) { ... }
+    const shape = this.typeShape(s);
+    if (shape) return shape;
+
+    if (ts.isTypeAliasDeclaration(s) && !s.typeParameters) {
       const mods = (ts.getModifiers(s) ?? []).map((m) => m.kind);
       if (mods.some((k) => k !== ts.SyntaxKind.ExportKeyword)) return undefined;
-      const members = ts.isTypeAliasDeclaration(s) ? (s.type as ts.TypeLiteralNode).members : s.members;
-      const simple = members.every(
-        (m) => ts.isPropertySignature(m) && m.type && !ts.getModifiers(m)?.length && (ts.isIdentifier(m.name) || ts.isStringLiteral(m.name)) && !m.type.getText(this.sf).includes('\n'),
-      );
-      if (!simple) return undefined;
-      const fields: Record<string, string> = { NAME: s.name.text };
-      members.forEach((m, i) => {
-        const p = m as ts.PropertySignature;
-        fields['N' + i] = p.name.getText(this.sf) + (p.questionToken ? '?' : '');
-        fields['T' + i] = p.type!.getText(this.sf);
-      });
-      return this.block('ts_type', {
-        extraState: { count: members.length, kind: ts.isInterfaceDeclaration(s) ? 'interface' : 'type', exported: mods.includes(ts.SyntaxKind.ExportKeyword) },
-        fields,
+      const exported = mods.includes(ts.SyntaxKind.ExportKeyword) ? JSON.stringify({ exported: true }) : undefined;
+      // type Gender = "male" | "female" | "other"
+      if (ts.isUnionTypeNode(s.type) && s.type.types.every((t) => ts.isLiteralTypeNode(t) && (ts.isStringLiteral(t.literal) || ts.isNumericLiteral(t.literal)))) {
+        const inputs: Record<string, Input> = {};
+        s.type.types.forEach((t, i) => (inputs['ARG' + i] = { block: this.expr((t as ts.LiteralTypeNode).literal as ts.Expression) }));
+        return this.block('ts_type_union', { fields: { NAME: s.name.text }, extraState: { count: s.type.types.length }, inputs, data: exported });
+      }
+      const text = s.type.getText(this.sf);
+      if (text.includes('\n')) return undefined;
+      return this.block('ts_type_alias', { fields: { NAME: s.name.text, TYPE: text }, data: exported });
+    }
+
+    if (ts.isTryStatement(s) && s.catchClause && !s.finallyBlock) {
+      const v = s.catchClause.variableDeclaration;
+      if (v && (!ts.isIdentifier(v.name) || v.type)) return undefined;
+      return this.block('ts_try', {
+        fields: { VAR: this.varRef(v ? (v.name as ts.Identifier).text : 'e') },
+        inputs: clean({ TRY: this.body(s.tryBlock), CATCH: this.body(s.catchClause.block) }),
+        data: v ? undefined : JSON.stringify({ noVar: true }),
       });
     }
+    if (ts.isThrowStatement(s)) return this.block('ts_throw', { inputs: { VALUE: { block: this.expr(s.expression) } } });
+    if (ts.isDoStatement(s)) return this.block('ts_do_while', { inputs: clean({ DO: this.body(s.statement), COND: { block: this.expr(s.expression) } }) });
 
     if (ts.isIfStatement(s)) {
       const inputs: Record<string, Input | undefined> = {};
@@ -499,6 +519,18 @@ class Converter {
           data: kind === 'let' ? JSON.stringify({ kind }) : undefined,
         });
       }
+      // for (const [key, value] of map)
+      if (ts.isVariableDeclarationList(init) && init.declarations.length === 1 && !init.declarations[0].type) {
+        const pat = init.declarations[0].name;
+        if (ts.isArrayBindingPattern(pat) && pat.elements.length === 2 && pat.elements.every((e) => ts.isBindingElement(e) && ts.isIdentifier(e.name) && !e.initializer && !e.dotDotDotToken)) {
+          const [k, v] = pat.elements.map((e) => ((e as ts.BindingElement).name as ts.Identifier).text);
+          return this.block('ts_foreach_pair', {
+            fields: { K: this.varRef(k), V: this.varRef(v) },
+            inputs: clean({ LIST: { block: this.expr(s.expression) }, DO: this.body(s.statement) }),
+            data: init.flags & ts.NodeFlags.Const ? undefined : JSON.stringify({ kind: 'let' }),
+          });
+        }
+      }
       return undefined;
     }
 
@@ -512,6 +544,52 @@ class Converter {
     }
 
     return undefined;
+  }
+
+  /** type X = { ... } / type X = Base & { ... } / interface X extends Base { ... } with simple rows (also methods). */
+  private typeShape(s: ts.Statement): BJ | undefined {
+    let members: ts.NodeArray<ts.TypeElement> | undefined;
+    let base = '-';
+    let kind: 'type' | 'interface' = 'type';
+    if (ts.isTypeAliasDeclaration(s) && !s.typeParameters) {
+      if (ts.isTypeLiteralNode(s.type)) members = s.type.members;
+      else if (ts.isIntersectionTypeNode(s.type) && s.type.types.length === 2 && ts.isTypeReferenceNode(s.type.types[0]) && !s.type.types[0].typeArguments && ts.isTypeLiteralNode(s.type.types[1])) {
+        base = s.type.types[0].getText(this.sf);
+        members = s.type.types[1].members;
+      }
+    } else if (ts.isInterfaceDeclaration(s) && !s.typeParameters) {
+      kind = 'interface';
+      members = s.members;
+      const h = s.heritageClauses;
+      if (h) {
+        if (h.length !== 1 || h[0].types.length !== 1 || h[0].types[0].typeArguments) return undefined;
+        base = h[0].types[0].getText(this.sf);
+      }
+    }
+    if (!members) return undefined;
+    const mods = ((ts.canHaveModifiers(s) ? ts.getModifiers(s) : undefined) ?? []).map((m) => m.kind);
+    if (mods.some((k) => k !== ts.SyntaxKind.ExportKeyword)) return undefined;
+    const nameOk = (n: ts.PropertyName) => ts.isIdentifier(n) || ts.isStringLiteral(n);
+    const simple = members.every((m) => {
+      if ((ts.canHaveModifiers(m) && ts.getModifiers(m)?.length) || !m.name || !nameOk(m.name)) return false;
+      if (ts.isPropertySignature(m)) return !!m.type && !m.type.getText(this.sf).includes('\n');
+      if (ts.isMethodSignature(m)) return !!m.type && !m.typeParameters && !this.textOf(m).includes('\n');
+      return false;
+    });
+    if (!simple) return undefined;
+    const fields: Record<string, string> = { NAME: (s as ts.TypeAliasDeclaration | ts.InterfaceDeclaration).name.text, BASE: base };
+    members.forEach((m, i) => {
+      if (ts.isMethodSignature(m)) {
+        const ps = m.parameters.map((p) => p.getText(this.sf)).join(', ');
+        fields['N' + i] = `${m.name.getText(this.sf)}${m.questionToken ? '?' : ''}(${ps})`;
+        fields['T' + i] = m.type!.getText(this.sf);
+      } else {
+        const p = m as ts.PropertySignature;
+        fields['N' + i] = p.name.getText(this.sf) + (p.questionToken ? '?' : '');
+        fields['T' + i] = p.type!.getText(this.sf);
+      }
+    });
+    return this.block('ts_type', { extraState: { count: members.length, kind, exported: mods.includes(ts.SyntaxKind.ExportKeyword) }, fields });
   }
 
   private forStatement(s: ts.ForStatement): BJ | undefined {
@@ -539,6 +617,22 @@ class Converter {
             inputs: clean({ FROM: { block: this.expr(from) }, TO: { block: this.expr(cond.right) }, DO: this.body(s.statement) }),
           });
         }
+      }
+      // the general counting loop: for (let i = A; i < / <= / > / >= B; i++ / i--)
+      const isDec =
+        (ts.isPostfixUnaryExpression(inc) || ts.isPrefixUnaryExpression(inc)) && inc.operator === ts.SyntaxKind.MinusMinusToken && inc.operand.getText(this.sf) === v;
+      const OPS: Partial<Record<ts.SyntaxKind, string>> = {
+        [ts.SyntaxKind.LessThanToken]: '<',
+        [ts.SyntaxKind.LessThanEqualsToken]: '<=',
+        [ts.SyntaxKind.GreaterThanToken]: '>',
+        [ts.SyntaxKind.GreaterThanEqualsToken]: '>=',
+      };
+      const op = OPS[cond.operatorToken.kind];
+      if ((isInc || isDec) && ts.isPostfixUnaryExpression(inc) && op && cond.left.getText(this.sf) === v) {
+        return this.block('ts_for', {
+          fields: { VAR: this.varRef(v), OP: op, STEP: isInc ? '++' : '--' },
+          inputs: clean({ FROM: { block: this.expr(single.initializer!) }, TO: { block: this.expr(cond.right) }, DO: this.body(s.statement) }),
+        });
       }
     }
     // any other for loop: keep the header as text, the body as blocks
@@ -572,7 +666,24 @@ class Converter {
           inputs: { INDEX: { block: this.expr(e.left.argumentExpression) }, ITEM: { block: this.expr(e.right) } },
         });
       }
+      // anything else: counts[letter] += 1, order.count -= 2, x *= 3 ...
+      const ASSIGN: Partial<Record<ts.SyntaxKind, string>> = {
+        [ts.SyntaxKind.EqualsToken]: '=',
+        [ts.SyntaxKind.PlusEqualsToken]: '+=',
+        [ts.SyntaxKind.MinusEqualsToken]: '-=',
+        [ts.SyntaxKind.AsteriskEqualsToken]: '*=',
+        [ts.SyntaxKind.SlashEqualsToken]: '/=',
+        [ts.SyntaxKind.PercentEqualsToken]: '%=',
+        [ts.SyntaxKind.QuestionQuestionEqualsToken]: '??=',
+      };
+      if (ASSIGN[op] && this.isTarget(e.left)) {
+        return this.block('ts_set_any', { fields: { OP: ASSIGN[op] }, inputs: { TARGET: { block: this.expr(e.left) }, VALUE: { block: this.expr(e.right) } } });
+      }
       return undefined;
+    }
+    // obj.count++ / counts[i]--
+    if ((ts.isPostfixUnaryExpression(e) && !ts.isIdentifier(e.operand) && this.isTarget(e.operand) && (e.operator === ts.SyntaxKind.PlusPlusToken || e.operator === ts.SyntaxKind.MinusMinusToken))) {
+      return this.block('ts_set_any', { fields: { OP: e.operator === ts.SyntaxKind.PlusPlusToken ? '++' : '--' }, inputs: { TARGET: { block: this.expr(e.operand) } } });
     }
     // x++ / x--
     if ((ts.isPostfixUnaryExpression(e) || ts.isPrefixUnaryExpression(e)) && ts.isIdentifier(e.operand)) {
@@ -644,7 +755,49 @@ class Converter {
         return this.block('procedures_callnoreturn', { extraState: { name: callee, params }, inputs });
       }
     }
+    if (awaited) return undefined;
+
+    // console.log("Average:", avg), console.error(...)
+    const con = /^console\.(log|error|warn|table)$/.exec(callee);
+    if (con) return this.block('ts_say_many', { fields: { FN: con[1] }, ...this.slots(args) });
+
+    // any other call: a function by name, or a method of a value
+    const generic = this.genericCall(e, true);
+    if (generic) return generic;
     return undefined;
+  }
+
+  /** ARG0..ARGn inputs + count for the blocks with a growing list of slots. */
+  private slots(args: readonly ts.Expression[]): { extraState: { count: number }; inputs: Record<string, Input> } {
+    const inputs: Record<string, Input> = {};
+    args.forEach((a, i) => (inputs['ARG' + i] = { block: this.expr(a) }));
+    return { extraState: { count: args.length }, inputs };
+  }
+
+  /** Math.floor(x), parseFloat(t), askNumber(...), condition(value) -> "call"; text.slice(0, 3), set.has(x) -> "method". */
+  private genericCall(c: ts.CallExpression, statement: boolean): BJ | undefined {
+    if (c.questionDotToken || c.typeArguments) return undefined;
+    const callee = c.expression;
+    const dotted = (n: ts.Expression): boolean => ts.isIdentifier(n) || (ts.isPropertyAccessExpression(n) && !n.questionDotToken && ts.isIdentifier(n.name) && dotted(n.expression));
+    const root = (n: ts.Expression): ts.Expression => (ts.isPropertyAccessExpression(n) ? root(n.expression) : n);
+    if (ts.isIdentifier(callee) || (dotted(callee) && this.isGlobal(root(callee)))) {
+      return this.block(statement ? 'ts_call_stmt' : 'ts_call', { fields: { NAME: callee.getText(this.sf) }, ...this.slots(c.arguments) });
+    }
+    if (ts.isPropertyAccessExpression(callee) && !callee.questionDotToken && ts.isIdentifier(callee.name)) {
+      return this.block(statement ? 'ts_method_stmt' : 'ts_method', {
+        fields: { METHOD: callee.name.text },
+        inputs: { OBJ: { block: this.expr(callee.expression) }, ...this.slots(c.arguments).inputs },
+        extraState: { count: c.arguments.length },
+      });
+    }
+    return undefined;
+  }
+
+  /** Something you can assign to: a variable, obj.prop or x[key]. */
+  private isTarget(n: ts.Expression): boolean {
+    if (ts.isIdentifier(n)) return !this.isGlobal(n);
+    if (ts.isPropertyAccessExpression(n)) return !n.questionDotToken && ts.isIdentifier(n.name);
+    return ts.isElementAccessExpression(n) && !n.questionDotToken;
   }
 
   // ---------------------------------------------------------------- expressions
@@ -663,11 +816,46 @@ class Converter {
     if (ts.isPrefixUnaryExpression(n) && n.operator === ts.SyntaxKind.MinusToken && ts.isNumericLiteral(n.operand) && /^[\d.]+$/.test(n.operand.text))
       return this.block('math_number', { fields: { NUM: -Number(n.operand.text) } });
     if (ts.isStringLiteral(n)) return this.block('text', { fields: { TEXT: n.text } });
+    if (ts.isNoSubstitutionTemplateLiteral(n)) return this.block('ts_template', { fields: { S0: rawTemplate(n) }, extraState: { count: 0 } });
+    if (ts.isTemplateExpression(n)) {
+      const fields: Record<string, string> = { S0: rawTemplate(n.head) };
+      const inputs: Record<string, Input> = {};
+      n.templateSpans.forEach((sp, i) => {
+        inputs['V' + i] = { block: this.expr(sp.expression) };
+        fields['S' + (i + 1)] = rawTemplate(sp.literal);
+      });
+      return this.block('ts_template', { fields, inputs, extraState: { count: n.templateSpans.length } });
+    }
+    if (ts.isRegularExpressionLiteral(n)) {
+      const m = /^\/([\s\S]*)\/([a-z]*)$/.exec(n.text);
+      if (m) return this.block('ts_regex', { fields: { PATTERN: m[1], FLAGS: m[2] } });
+    }
+    if (ts.isSpreadElement(n)) return this.block('ts_spread', { inputs: { VALUE: { block: this.expr(n.expression) } } });
+    if (ts.isPrefixUnaryExpression(n) && n.operator === ts.SyntaxKind.MinusToken) return this.block('ts_neg', { inputs: { VALUE: { block: this.expr(n.operand) } } });
+    if (ts.isNewExpression(n) && (ts.isIdentifier(n.expression) || ts.isPropertyAccessExpression(n.expression))) {
+      const cls = n.expression.getText(this.sf) + (n.typeArguments ? '<' + n.typeArguments.map((t) => t.getText(this.sf)).join(', ') + '>' : '');
+      return this.block('ts_new', { fields: { CLASS: cls }, ...this.slots(n.arguments ?? []) });
+    }
+    if (ts.isArrowFunction(n) && !n.typeParameters && !n.type) {
+      const open = n.getChildren(this.sf).find((c) => c.kind === ts.SyntaxKind.OpenParenToken);
+      const close = n.getChildren(this.sf).find((c) => c.kind === ts.SyntaxKind.CloseParenToken);
+      const bare = !open;
+      const params = bare ? n.parameters.map((p) => p.getText(this.sf)).join(', ') : this.text.slice(open!.end, close!.getStart(this.sf)).replace(/\s+/g, ' ').trim();
+      const m: Record<string, boolean> = {};
+      if (bare) m.bare = true;
+      if (hasModifier(n, ts.SyntaxKind.AsyncKeyword)) m.async = true;
+      const data = Object.keys(m).length ? JSON.stringify(m) : undefined;
+      if (ts.isBlock(n.body)) return this.block('ts_arrow_block', { fields: { PARAMS: params }, inputs: clean({ DO: this.body(n.body) }), data });
+      return this.block('ts_arrow', { fields: { PARAMS: params }, inputs: { VALUE: { block: this.expr(n.body) } }, data });
+    }
     if (n.kind === ts.SyntaxKind.TrueKeyword) return this.block('logic_boolean', { fields: { BOOL: 'TRUE' } });
     if (n.kind === ts.SyntaxKind.FalseKeyword) return this.block('logic_boolean', { fields: { BOOL: 'FALSE' } });
+    if (n.kind === ts.SyntaxKind.NullKeyword) return this.block('ts_literal', { fields: { VALUE: 'null' } });
+    if (n.kind === ts.SyntaxKind.ThisKeyword) return this.block('ts_literal', { fields: { VALUE: 'this' } });
     if (ts.isIdentifier(n)) {
-      if (n.text === 'undefined' || n.text === 'NaN' || n.text === 'Infinity') return undefined;
-      if (this.isGlobal(n)) return undefined;
+      if (n.text === 'undefined' || n.text === 'NaN') return this.block('ts_literal', { fields: { VALUE: n.text } });
+      if (n.text === 'Infinity') return this.block('ts_global', { fields: { NAME: 'Infinity' } });
+      if (this.isGlobal(n)) return this.block('ts_global', { fields: { NAME: n.text } }); // Map, Math, process ... used as a value
       return this.block('variables_get', { fields: { VAR: this.varRef(n.text) } });
     }
 
@@ -692,7 +880,7 @@ class Converter {
     if (ts.isAsExpression(n)) return this.block('ts_as', { fields: { TYPE: n.type.getText(this.sf) }, inputs: { VALUE: { block: this.expr(n.expression) } } });
 
     if (ts.isArrayLiteralExpression(n)) {
-      if (n.elements.some((el) => ts.isSpreadElement(el) || ts.isOmittedExpression(el))) return undefined;
+      if (n.elements.some((el) => ts.isOmittedExpression(el))) return undefined;
       const inputs: Record<string, Input> = {};
       n.elements.forEach((el, i) => (inputs['ITEM' + i] = { block: this.expr(el) }));
       return this.block('ts_list_literal', { extraState: { itemCount: n.elements.length }, inputs });
@@ -702,8 +890,9 @@ class Converter {
       const list = n.expression.text;
       const arg = n.argumentExpression;
       if (arg.getText(this.sf).replace(/\s+/g, '') === `${list}.length-1`) return this.block('ts_list_last', { fields: { LIST: this.varRef(list) } });
-      return this.block('ts_list_item', { fields: { LIST: this.varRef(list) }, inputs: { INDEX: { block: this.expr(arg) } } });
+      if (!this.isGlobal(n.expression)) return this.block('ts_list_item', { fields: { LIST: this.varRef(list) }, inputs: { INDEX: { block: this.expr(arg) } } });
     }
+    if (ts.isElementAccessExpression(n) && !n.questionDotToken) return this.block('ts_index', { inputs: { OBJ: { block: this.expr(n.expression) }, KEY: { block: this.expr(n.argumentExpression) } } });
 
     if (ts.isPropertyAccessExpression(n) && n.name.text === 'length') {
       if (ts.isIdentifier(n.expression) && this.arrays.has(n.expression.text)) return this.block('ts_list_length', { fields: { LIST: this.varRef(n.expression.text) } });
@@ -712,21 +901,29 @@ class Converter {
     }
 
     if (ts.isPropertyAccessExpression(n) && !n.questionDotToken && ts.isIdentifier(n.name)) {
-      if (this.isGlobal(n.expression)) return undefined; // Math.PI, process.argv, ...
+      if (this.isGlobal(n.expression)) return this.block('ts_global', { fields: { NAME: n.getText(this.sf) } }); // Math.PI, process.argv, ...
       return this.block('ts_prop', { fields: { PROP: n.name.text }, inputs: { OBJ: { block: this.expr(n.expression) } } });
     }
 
     if (ts.isObjectLiteralExpression(n)) {
       const props = n.properties;
-      const ok = props.every((p) => (ts.isPropertyAssignment(p) && (ts.isIdentifier(p.name) || ts.isStringLiteral(p.name))) || ts.isShorthandPropertyAssignment(p));
+      const isMethod = (p: ts.ObjectLiteralElementLike): p is ts.MethodDeclaration =>
+        ts.isMethodDeclaration(p) && ts.isIdentifier(p.name) && !!p.body && !p.asteriskToken && !p.typeParameters && !p.type && !p.questionToken && !ts.getModifiers(p)?.length;
+      const ok = props.every((p) => (ts.isPropertyAssignment(p) && (ts.isIdentifier(p.name) || ts.isStringLiteral(p.name))) || ts.isShorthandPropertyAssignment(p) || isMethod(p));
       if (!ok) return undefined;
       const fields: Record<string, string> = {};
-      const inputs: Record<string, Input> = {};
+      const inputs: Record<string, Input | undefined> = {};
+      const methods: Record<number, string> = {};
       props.forEach((p, i) => {
         fields['K' + i] = (p.name as ts.Identifier | ts.StringLiteral).text;
-        inputs['V' + i] = { block: ts.isShorthandPropertyAssignment(p) ? this.expr(p.name) : this.expr((p as ts.PropertyAssignment).initializer) };
+        if (isMethod(p)) {
+          methods[i] = p.parameters.map((x) => x.getText(this.sf)).join(', ');
+          fields['P' + i] = methods[i];
+          inputs['V' + i] = this.body(p.body!);
+        } else inputs['V' + i] = { block: ts.isShorthandPropertyAssignment(p) ? this.expr(p.name) : this.expr((p as ts.PropertyAssignment).initializer) };
       });
-      return this.block('ts_object', { extraState: { count: props.length }, fields, inputs });
+      const extraState = Object.keys(methods).length ? { count: props.length, methods } : { count: props.length };
+      return this.block('ts_object', { extraState, fields, inputs: clean(inputs) });
     }
 
     let awaited = false;
@@ -744,8 +941,12 @@ class Converter {
     const args = c.arguments;
     if (awaited && callee === 'ask' && this.helpersAvailable.has('ask') && args.length === 1) return this.block('ts_ask', { inputs: { TEXT: { block: this.expr(args[0]) } } });
     if (awaited) {
-      if (ts.isIdentifier(c.expression) && this.funcs.has(callee)) return this.userCall(c);
-      return undefined;
+      if (ts.isIdentifier(c.expression) && this.funcs.has(callee)) {
+        const u = this.userCall(c);
+        if (u) return u;
+      }
+      const inner = this.callExpr(c, false);
+      return inner ? this.block('ts_await', { inputs: { VALUE: { block: inner } } }) : undefined;
     }
     if (callee === 'Number' && args.length === 1) {
       const a = args[0];
@@ -773,8 +974,11 @@ class Converter {
       }
       if (method === 'includes' && args.length === 1) return this.block('ts_contains', { inputs: { TEXT: { block: this.expr(target) }, PART: { block: this.expr(args[0]) } } });
     }
-    if (ts.isIdentifier(c.expression) && this.funcs.has(callee)) return this.userCall(c);
-    return undefined;
+    if (ts.isIdentifier(c.expression) && this.funcs.has(callee)) {
+      const u = this.userCall(c);
+      if (u) return u;
+    }
+    return this.genericCall(c, false);
   }
 
 /** list.map((item) => ...), list.filter(...), list.reduce((total, item) => ..., start) */
@@ -864,6 +1068,11 @@ class Converter {
     if (!minus || !ts.isBinaryExpression(minus)) return undefined;
     return this.block('ts_random', { inputs: { FROM: { block: this.expr(n.right) }, TO: { block: this.expr(minus.left) } } });
   }
+}
+
+/** The text of a `template` part exactly as written (escapes kept). */
+function rawTemplate(n: ts.TemplateLiteralLikeNode): string {
+  return n.rawText ?? n.text;
 }
 
 function hasModifier(n: ts.Node, kind: ts.SyntaxKind): boolean {

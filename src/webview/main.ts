@@ -4,6 +4,7 @@ import { generate, meta, setMeta } from './generator';
 import { initConsole } from './console';
 import { initFinder } from './finder';
 import { initRecipes } from './recipes';
+import { initBlockHelp } from './help';
 import { collectTypes, NO_TYPE, setTypeWorkspace, typeLabel, typeValues } from './types';
 import { tr, trf } from '../i18n';
 
@@ -347,6 +348,14 @@ function listsFlyout(ws: Blockly.WorkspaceSvg): Blockly.utils.toolbox.FlyoutItem
   items.push({ kind: 'label', text: tr('The whole array:'), 'web-class': 'tbHint' });
   for (const v of lists) items.push({ kind: 'block', type: 'variables_get', fields: { VAR: { id: v.getId() } } });
   items.push({ kind: 'block', type: 'ts_list_literal', extraState: { itemCount: 2 }, inputs: { ITEM0: txt('a'), ITEM1: txt('b') } });
+  const first = lists[0] ? { block: { type: 'variables_get', fields: { VAR: { id: lists[0].getId() } } } } : undefined;
+  items.push(
+    { kind: 'label', text: tr('More array methods (pick one from the list):'), 'web-class': 'tbHint' },
+    { kind: 'block', type: 'ts_method', fields: { METHOD: 'slice' }, extraState: { count: 1 }, inputs: { ...(first ? { OBJ: first } : {}), ARG0: num(1) } },
+    { kind: 'block', type: 'ts_method', fields: { METHOD: 'sort' }, extraState: { count: 1 }, inputs: { ...(first ? { OBJ: first } : {}), ARG0: { block: { type: 'ts_arrow', fields: { PARAMS: 'a, b' }, inputs: { VALUE: { block: { type: 'ts_arith', fields: { OP: '-' }, inputs: { A: { block: { type: 'variables_get', fields: { VAR: { name: 'a' } } } }, B: { block: { type: 'variables_get', fields: { VAR: { name: 'b' } } } } } } } } } } } },
+    { kind: 'block', type: 'ts_spread' },
+    { kind: 'block', type: 'ts_index' },
+  );
   return items as Blockly.utils.toolbox.FlyoutItemInfoArray;
 }
 
@@ -355,6 +364,16 @@ function functionsFlyout(ws: Blockly.WorkspaceSvg): Blockly.utils.toolbox.Flyout
   const at = items.findIndex((i) => (i as { type?: string }).type === 'procedures_defreturn');
   items.splice(at + 1, 0, { kind: 'block', type: 'ts_return' } as never);
   items.unshift({ kind: 'label', text: tr('Right-click a function block to set its types.'), 'web-class': 'tbHint' } as never);
+  items.push(
+    { kind: 'label', text: tr('Call any function (Math.floor, a function from another file, a parameter ...):'), 'web-class': 'tbHint' } as never,
+    { kind: 'block', type: 'ts_call', fields: { NAME: 'Math.round' }, extraState: { count: 1 }, inputs: { ARG0: { shadow: { type: 'math_number', fields: { NUM: 2.5 } } } } } as never,
+    { kind: 'block', type: 'ts_call_stmt', fields: { NAME: 'askNumber' }, extraState: { count: 1 } } as never,
+    { kind: 'label', text: tr('A function without a name (for map, filter, sort ...):'), 'web-class': 'tbHint' } as never,
+    { kind: 'block', type: 'ts_arrow', fields: { PARAMS: 'x' } } as never,
+    { kind: 'block', type: 'ts_arrow', fields: { PARAMS: 'a, b' }, inputs: { VALUE: { block: { type: 'ts_arith', fields: { OP: '-' }, inputs: { A: { block: { type: 'variables_get', fields: { VAR: { name: 'a' } } } }, B: { block: { type: 'variables_get', fields: { VAR: { name: 'b' } } } } } } } } } as never,
+    { kind: 'block', type: 'ts_arrow_block', fields: { PARAMS: 'x' } } as never,
+    { kind: 'block', type: 'ts_await' } as never,
+  );
   return items as Blockly.utils.toolbox.FlyoutItemInfoArray;
 }
 
@@ -437,6 +456,7 @@ for (const el of document.querySelectorAll<HTMLElement>('.blocklyToolboxCategory
 
 setTypeWorkspace(ws);
 initRecipes(ws, currentTheme);
+initBlockHelp(currentTheme, (window as unknown as { BLOCKLY_MEDIA?: string }).BLOCKLY_MEDIA ?? 'media/blockly/');
 ws.registerToolboxCategoryCallback('TS_VARIABLES', variablesFlyout);
 ws.registerToolboxCategoryCallback('TS_LISTS', listsFlyout);
 ws.registerToolboxCategoryCallback('TS_FUNCTIONS', functionsFlyout);
