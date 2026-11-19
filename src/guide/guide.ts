@@ -281,7 +281,9 @@ async function runExample(box: HTMLElement, js: string) {
   };
   window.addEventListener('unhandledrejection', onReject, { once: true });
   try {
-    const fn = new Function('console', 'ask', 'sleep', 'sayColored', 'process', `"use strict";\n${js}`);
+    // async, so "wait" / "ask" work anywhere in the example (they are async in the browser)
+    const AsyncFn = Object.getPrototypeOf(async function () {}).constructor as new (...a: string[]) => (...b: unknown[]) => Promise<void>;
+    const fn = new AsyncFn('console', 'ask', 'sleep', 'sayColored', 'process', `"use strict";\n${js}`);
     fn(consoleStub, ask, sleep, sayColored, processStub);
   } catch (err) {
     if (!(err instanceof StopSignal)) print(String((err as Error).message ?? err), 'err');

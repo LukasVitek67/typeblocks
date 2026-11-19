@@ -312,12 +312,13 @@ for (let i = 1; i <= 2; i++) {
   await sleep(0);
 }
 const greet = (who: string) => {
-  return sleep(0);
+  return who.length;
 };
 `;
 
 const cases = [
-  { name: 'top-level wait', src: TOP_WAIT, stdin: '', noRaw: true, keep: ['async function main(): Promise<void> {', 'main();'], expect: ['ahoj', 'Hello!\nHello!'] },
+  { name: 'top-level wait', src: TOP_WAIT, stdin: '', noRaw: true, keep: ['  pause(0);', 'function pause(seconds: number): void {'], lose: ['await', 'async', 'main('], expect: ['ahoj', 'Hello!\nHello!'] },
+  { name: 'plain ask', src: 'const name = ask("Name?");\nconsole.log("Hi " + name);\nconst n = Number(ask("Number?"));\nconsole.log(n * 2);\n', stdin: 'Žofie\n21\n', noRaw: true, lose: ['await', 'async'], expect: ['Hi Žofie', '42'] },
   {
     name: 'school assignments',
     src: SCHOOL,
@@ -356,6 +357,7 @@ for (const c of cases) {
   if (c.exact && a.ts !== c.src) problems.push('not identical to the original file\n' + diff(c.src, a.ts));
   if (c.noRaw && a.raw) problems.push(`${a.raw} part(s) became raw code blocks`);
   for (const k of c.keep ?? []) if (!a.ts.includes(k)) problems.push(`lost: ${k}`);
+  for (const k of c.lose ?? []) if (a.ts.includes(k)) problems.push(`must not contain: ${k}`);
   if (!a.spans.length) problems.push('no line spans');
 
   const tsFile = path.join(tmp, c.name + '.ts');

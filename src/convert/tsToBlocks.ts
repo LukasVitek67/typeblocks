@@ -22,7 +22,7 @@ export interface Converted {
   blockCount: number;
 }
 
-const HELPERS = ['ask', 'sleep', 'sayColored'] as const;
+const HELPERS = ['ask', 'sleep', 'pause', 'sayColored'] as const;
 const COLOR_CODES: Record<number, string> = { 31: 'red', 32: 'green', 33: 'yellow', 34: 'blue', 35: 'magenta', 36: 'cyan' };
 const ARITH = new Map<ts.SyntaxKind, string>([
   [ts.SyntaxKind.PlusToken, '+'],
@@ -193,8 +193,10 @@ class Converter {
 
   private isOurHelper(name: string, fn: ts.FunctionDeclaration): boolean {
     const t = fn.getText(this.sf);
-    if (name === 'ask') return t.includes('readline') && t.includes('rl.question(');
+    // ask: the plain one (reads the console line by line) or the older async one (readline)
+    if (name === 'ask') return (t.includes('readSync') && t.includes('process.stdout.write')) || (t.includes('readline') && t.includes('rl.question('));
     if (name === 'sleep') return t.includes('setTimeout(resolve, seconds * 1000)');
+    if (name === 'pause') return t.includes('Atomics.wait');
     if (name === 'sayColored') return t.includes('\\x1b[');
     return false;
   }
@@ -363,7 +365,7 @@ class Converter {
   private topLevelBlock(s: ts.Statement, next: ts.Statement | undefined): { block: BJ; skipNext?: boolean } | undefined {
     // async function main() { ... }  main();   ->  "when Run clicked"
     if (
-      ts.isFunctionDeclaration(s) && s.name?.text === 'main' && s.body && !s.parameters.length && hasModifier(s, ts.SyntaxKind.AsyncKeyword) &&
+      ts.isFunctionDeclaration(s) && s.name?.text === 'main' && s.body && !s.parameters.length && !s.typeParameters &&
       next && ts.isExpressionStatement(next) && next.expression.getText(this.sf) === 'main()'
     ) {
       const b = this.block('ts_on_start');
@@ -706,6 +708,9 @@ class Converter {
     const callee = e.expression.getText(this.sf);
     const args = e.arguments;
 
+    if (!awaited && callee === 'pause' && this.helpersAvailable.has('pause') && args.length === 1) {
+      return this.block('ts_wait', { inputs: { SECS: { block: this.expr(args[0]) } } });
+    }
     if (awaited && callee === 'sleep' && this.helpersAvailable.has('sleep') && args.length === 1) {
       return this.block('ts_wait', { inputs: { SECS: { block: this.expr(args[0]) } } });
     }
@@ -948,8 +953,11 @@ class Converter {
       const inner = this.callExpr(c, false);
       return inner ? this.block('ts_await', { inputs: { VALUE: { block: inner } } }) : undefined;
     }
+    if (callee === 'ask' && this.helpersAvailable.has('ask') && args.length === 1) return this.block('ts_ask', { inputs: { TEXT: { block: this.expr(args[0]) } } });
     if (callee === 'Number' && args.length === 1) {
       const a = args[0];
+      if (ts.isCallExpression(a) && a.expression.getText(this.sf) === 'ask' && this.helpersAvailable.has('ask') && a.arguments.length === 1)
+        return this.block('ts_ask_number', { inputs: { TEXT: { block: this.expr(a.arguments[0]) } } });
       if (ts.isAwaitExpression(a) && ts.isCallExpression(a.expression) && a.expression.expression.getText(this.sf) === 'ask' && this.helpersAvailable.has('ask') && a.expression.arguments.length === 1)
         return this.block('ts_ask_number', { inputs: { TEXT: { block: this.expr(a.expression.arguments[0]) } } });
       return this.block('ts_to_number', { inputs: { VALUE: { block: this.expr(a) } } });

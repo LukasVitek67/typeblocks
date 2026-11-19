@@ -73,6 +73,11 @@ export class TsGenerator extends JavascriptGenerator {
   /** false = leave out the ask/sleep/sayColored helpers (the guide provides its own) */
   emitHelpers = true;
 
+  /** In the browser (no helpers written) "wait" and "ask" are async; in a real file they are plain calls. */
+  get helpersWait(): boolean {
+    return !this.emitHelpers;
+  }
+
   constructor() {
     super('TypeScript');
     Object.assign(this.forBlock, javascriptGenerator.forBlock, OVERRIDES);
@@ -103,7 +108,7 @@ export class TsGenerator extends JavascriptGenerator {
     this.usesProcess = false;
     this.usesRequire = false;
     this.helpers = {};
-    this.asyncFns = computeAsync(ws);
+    this.asyncFns = computeAsync(ws, this.helpersWait);
   }
 
   /** Variables keep exactly the name they have in the code. */
@@ -134,12 +139,6 @@ export class TsGenerator extends JavascriptGenerator {
       let line = this.blockToCode(block);
       if (Array.isArray(line)) line = line[0];
       if (!line) continue;
-      // "await" outside a function only works in ES modules, not in CommonJS (Run, ts-node, most
-      // school projects). The universal way: put the steps into  async function main() { ... }  main();
-      if (!HATS.has(block.type) && !DEFS.includes(block.type) && chainWaits(block, this.asyncFns)) {
-        const fn = this.nameDB_!.getDistinctName('main', Blockly.Names.NameType.PROCEDURE);
-        line = `async function ${fn}()${this.typed ? ': Promise<void>' : ''} {\n${this.prefixLines(line, this.INDENT)}}\n${fn}();\n`;
-      }
       if (parts.length && (!prevComments || meta(block).blank)) parts.push('\n');
       parts.push(line);
       prevComments = onlyComments(block);
@@ -177,25 +176,47 @@ export class TsGenerator extends JavascriptGenerator {
     return this.STATEMENT_PREFIX ? this.injectId(this.STATEMENT_PREFIX, block) : '';
   }
 
+  /** "wait": pause(seconds) stops the program for a while - a plain call, no await needed (works in CommonJS and ES modules). */
   helperSleep(): string {
-    this.helpers['sleep'] = 'function sleep(seconds: number): Promise<void> {\n  return new Promise((resolve) => setTimeout(resolve, seconds * 1000));\n}';
-    return 'sleep';
+    if (this.helpersWait) return 'sleep'; // the browser gives its own async sleep
+    this.helpers['pause'] =
+      'function pause(seconds: number): void {\n' +
+      '  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, seconds * 1000);\n' +
+      '}';
+    return 'pause';
   }
 
+  /** "ask": ask(question) waits for a line typed in the console and gives it back - a plain call, like askString in school projects. */
   helperAsk(): string {
+    if (this.helpersWait) return 'ask'; // the browser gives its own async ask
     this.usesProcess = true;
     if (!this.nodeTypes) this.usesRequire = true;
-    const load = this.nodeTypes ? 'const readline = await import("node:readline");' : 'const readline = require("node:readline");';
     this.helpers['ask'] =
-      'async function ask(question: string): Promise<string> {\n' +
-      `  ${load}\n` +
-      '  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });\n' +
-      '  return new Promise((resolve) => {\n' +
-      '    rl.question(question + " ", (answer: string) => {\n' +
-      '      rl.close();\n' +
-      '      resolve(answer);\n' +
-      '    });\n' +
-      '  });\n}';
+      'function ask(question: string): string {\n' +
+      '  // works both in CommonJS (require) and in ES modules (getBuiltinModule)\n' +
+      '  const load = (name: string) => (typeof require === "function" ? require(name) : (process as any).getBuiltinModule(name));\n' +
+      '  const fs = load("node:fs");\n' +
+      '  process.stdout.write(question + " ");\n' +
+      '  const bytes: number[] = [];\n' +
+      '  const one = new Uint8Array(1);\n' +
+      '  for (;;) {\n' +
+      '    let n = 0;\n' +
+      '    try {\n' +
+      '      n = fs.readSync(0, one, 0, 1, null);\n' +
+      '    } catch (e) {\n' +
+      '      const code = (e as { code?: string }).code;\n' +
+      '      if (code === "EAGAIN") {\n' +
+      '        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);\n' +
+      '        continue;\n' +
+      '      }\n' +
+      '      if (code === "EOF") break;\n' +
+      '      throw e;\n' +
+      '    }\n' +
+      '    if (n === 0 || one[0] === 10) break;\n' +
+      '    if (one[0] !== 13) bytes.push(one[0]);\n' +
+      '  }\n' +
+      '  return load("node:buffer").Buffer.from(bytes).toString("utf8");\n' +
+      '}';
     return 'ask';
   }
 
@@ -221,27 +242,35 @@ function onlyComments(block: Blockly.Block): boolean {
 
 const FUNCTION_LIKE = new Set(['ts_arrow', 'ts_arrow_block', ...DEFS]);
 
-/** Does this block (or something in it) wait - ask, sleep, await, call an async function? Not counting inner functions. */
-export function waits(block: Blockly.Block, asyncFns: Set<string>): boolean {
-  if (AWAITING.has(block.type) || block.type === 'ts_await') return true;
-  if (block.type.startsWith('procedures_call') && asyncFns.has(block.getFieldValue('NAME'))) return true;
+/** What decides whether code has to wait: the async functions, and whether "wait" / "ask" blocks wait. */
+export interface WaitCtx {
+  asyncFns: Set<string>;
+  /** true only in the browser (guide, help window): there "wait" and "ask" must await. In a real file they are plain calls. */
+  helpersWait: boolean;
+}
+
+/** Does this block (or something in it) wait - await, call an async function (in the browser also wait / ask)? Not counting inner functions. */
+export function waits(block: Blockly.Block, ctx: WaitCtx): boolean {
+  if (block.type === 'ts_await' || (ctx.helpersWait && AWAITING.has(block.type))) return true;
+  if (block.type.startsWith('procedures_call') && ctx.asyncFns.has(block.getFieldValue('NAME'))) return true;
+  if ((block.type === 'ts_code_stmt' || block.type === 'ts_code_expr') && /\bawait\b/.test(String((block as unknown as { code?: string }).code ?? block.getFieldValue('CODE') ?? ''))) return true;
   for (const input of block.inputList) {
     const child = input.connection?.targetBlock();
     if (!child || FUNCTION_LIKE.has(child.type)) continue;
     // methods of an object are functions of their own
     if (block.type === 'ts_object' && input.type === Blockly.inputs.inputTypes.STATEMENT) continue;
-    if (chainWaits(child, asyncFns)) return true;
+    if (chainWaits(child, ctx)) return true;
   }
   return false;
 }
 
-export function chainWaits(block: Blockly.Block, asyncFns: Set<string>): boolean {
-  for (let b: Blockly.Block | null = block; b; b = b.getNextBlock()) if (waits(b, asyncFns)) return true;
+export function chainWaits(block: Blockly.Block | null, ctx: WaitCtx): boolean {
+  for (let b: Blockly.Block | null = block; b; b = b.getNextBlock()) if (waits(b, ctx)) return true;
   return false;
 }
 
-/** Which functions must be `async`: they were async, or they wait/ask/call an async function. */
-export function computeAsync(ws: Blockly.Workspace): Set<string> {
+/** Which functions must be `async`: only those that really await (or call such a function). */
+export function computeAsync(ws: Blockly.Workspace, helpersWait = false): Set<string> {
   const defs = DEFS.flatMap((t) => ws.getBlocksByType(t, false));
   const set = new Set<string>();
   let changed = true;
@@ -250,9 +279,10 @@ export function computeAsync(ws: Blockly.Workspace): Set<string> {
     for (const d of defs) {
       const name = d.getFieldValue('NAME');
       if (set.has(name)) continue;
-      const needs =
-        meta(d).async ||
-        d.getDescendants(false).some((x) => AWAITING.has(x.type) || (x.type.startsWith('procedures_call') && set.has(x.getFieldValue('NAME'))));
+      const body = d.getInputTargetBlock('STACK');
+      const ret = d.getInputTargetBlock('RETURN');
+      const ctx = { asyncFns: set, helpersWait };
+      const needs = chainWaits(body, ctx) || (!!ret && chainWaits(ret, ctx));
       if (needs) {
         set.add(name);
         changed = true;
@@ -284,15 +314,17 @@ const OVERRIDES: Record<string, ReturnType<typeof G>> = {
   // ---------- Events ----------
   ts_on_start: G((block, g) => {
     const fn = g.nameDB_!.getDistinctName('main', Blockly.Names.NameType.PROCEDURE);
-    return `async function ${fn}()${g.typed ? ': Promise<void>' : ''} {\n${chainBody(block, g)}}\n${fn}();\n`;
+    const isAsync = chainWaits(block.getNextBlock(), g);
+    const ret = g.typed ? (isAsync ? ': Promise<void>' : ': void') : '';
+    return `${isAsync ? 'async ' : ''}function ${fn}()${ret} {\n${chainBody(block, g)}}\n${fn}();\n`;
   }),
   ts_every: G((block, g) => {
     const secs = val(g, block, 'SECS', Order.MULTIPLICATION, '1');
-    return `setInterval(async () => {\n${chainBody(block, g)}}, ${secs} * 1000);\n`;
+    return `setInterval(${chainWaits(block.getNextBlock(), g) ? 'async ' : ''}() => {\n${chainBody(block, g)}}, ${secs} * 1000);\n`;
   }),
 
   // ---------- Control ----------
-  ts_wait: G((block, g) => `await ${g.helperSleep()}(${val(g, block, 'SECS', Order.NONE, '1')});\n`),
+  ts_wait: G((block, g) => `${g.helpersWait ? 'await ' : ''}${g.helperSleep()}(${val(g, block, 'SECS', Order.NONE, '1')});\n`),
   ts_repeat: G((block, g) => {
     const times = val(g, block, 'TIMES', Order.RELATIONAL, '0');
     const i = g.nameDB_!.getDistinctName('i', Blockly.Names.NameType.VARIABLE);
@@ -320,8 +352,12 @@ const OVERRIDES: Record<string, ReturnType<typeof G>> = {
   // ---------- Console ----------
   ts_say: G((block, g) => `console.log(${val(g, block, 'TEXT', Order.NONE, '""')});\n`),
   ts_say_color: G((block, g) => `${g.helperColor()}(${val(g, block, 'TEXT', Order.NONE, '""')}, ${ANSI[block.getFieldValue('COLOR')] ?? 0});\n`),
-  ts_ask: G((block, g) => [`await ${g.helperAsk()}(${val(g, block, 'TEXT', Order.NONE, '""')})`, Order.AWAIT]),
-  ts_ask_number: G((block, g) => [`Number(await ${g.helperAsk()}(${val(g, block, 'TEXT', Order.NONE, '""')}))`, Order.FUNCTION_CALL]),
+  ts_ask: G((block, g) =>
+    g.helpersWait
+      ? [`await ${g.helperAsk()}(${val(g, block, 'TEXT', Order.NONE, '""')})`, Order.AWAIT]
+      : [`${g.helperAsk()}(${val(g, block, 'TEXT', Order.NONE, '""')})`, Order.FUNCTION_CALL],
+  ),
+  ts_ask_number: G((block, g) => [`Number(${g.helpersWait ? 'await ' : ''}${g.helperAsk()}(${val(g, block, 'TEXT', Order.NONE, '""')}))`, Order.FUNCTION_CALL]),
   ts_comment: G((block) => {
     const m = meta(block);
     const text = `//${m.nospace ? '' : ' '}${String(block.getFieldValue('TEXT') ?? '')}`.trimEnd();
@@ -561,7 +597,12 @@ function defineFunction(block: Blockly.Block, g: TsGenerator): string {
     const t = m.types ? (i < m.types.length ? m.types[i] : 'any') : 'any';
     return g.getVariableName(v.getId()) + (t && g.typed ? ': ' + t : '');
   });
-  const head = `${m.exported && g.typed ? 'export ' : ''}${g.asyncFns.has(raw) ? 'async ' : ''}function ${name}(${params.join(', ')})${m.ret && g.typed ? ': ' + m.ret : ''}`;
+  const isAsync = g.asyncFns.has(raw);
+  // a function that was async only because it waited (now a plain pause) returns the plain value
+  let retType = m.ret ?? '';
+  const promised = /^Promise<([\s\S]+)>$/.exec(retType.trim());
+  if (!isAsync && promised) retType = promised[1];
+  const head = `${m.exported && g.typed ? 'export ' : ''}${isAsync ? 'async ' : ''}function ${name}(${params.join(', ')})${retType && g.typed ? ': ' + retType : ''}`;
   return g.mark(block) + `${head} {\n${body}${ret}}\n`;
 }
 
@@ -644,7 +685,7 @@ Object.assign(OVERRIDES, {
     const p = params(g, b.getFieldValue('PARAMS'));
     const head = m.bare && /^[A-Za-z_$][\w$]*$/.test(p) ? p : `(${p})`;
     const inner = b.getInputTargetBlock('VALUE');
-    const isAsync = m.async || (!!inner && !FUNCTION_LIKE.has(inner.type) && chainWaits(inner, g.asyncFns));
+    const isAsync = m.async || (!!inner && !FUNCTION_LIKE.has(inner.type) && chainWaits(inner, g));
     return [`${isAsync ? 'async ' : ''}${head} => ${v}`, Order.ASSIGNMENT];
   }),
   ts_arrow_block: G((b, g) => {
@@ -652,7 +693,7 @@ Object.assign(OVERRIDES, {
     const p = params(g, b.getFieldValue('PARAMS'));
     const head = m.bare && /^[A-Za-z_$][\w$]*$/.test(p) ? p : `(${p})`;
     const inner = b.getInputTargetBlock('DO');
-    const isAsync = m.async || (!!inner && chainWaits(inner, g.asyncFns));
+    const isAsync = m.async || (!!inner && chainWaits(inner, g));
     return [`${isAsync ? 'async ' : ''}${head} => {\n${g.statementToCode(b, 'DO')}}`, Order.ASSIGNMENT];
   }),
   ts_index: G((b, g) => [`${val(g, b, 'OBJ', Order.MEMBER, '[]')}[${val(g, b, 'KEY', Order.NONE, '0')}]`, Order.MEMBER]),
