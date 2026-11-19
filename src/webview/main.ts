@@ -654,6 +654,9 @@ window.addEventListener('message', (ev: MessageEvent) => {
     tests?: { label: string } | null;
   };
   switch (m.type) {
+    case 'outdated':
+      $('rewrite').hidden = !(m as { outdated?: boolean }).outdated;
+      break;
     case 'load':
       if (m.nodeTypes !== undefined) nodeTypes = m.nodeTypes;
       if (m.style) codeStyle = m.style;
@@ -700,3 +703,9 @@ if (typeof acquireVsCodeApi !== 'function') {
   (window as unknown as { __tb: unknown }).__tb = { ws, Blockly, con }; // for debugging the browser preview
   if (preview) load(preview, false);
 }
+
+// "Rewrite code": write the file exactly the way the blocks write it now (the blocks do not change)
+$('rewrite').addEventListener('click', () => {
+  $('rewrite').hidden = true;
+  emit('change');
+});

@@ -191,6 +191,8 @@ const CS: Record<string, string> = {
   Insert: 'Vložit',
   'Show code': 'Ukázat kód',
   'Hide code': 'Skrýt kód',
+  'Rewrite code': 'Přepsat kód',
+  'The code in the file is written differently than these blocks write it now (e.g. by an older TypeBlocks). Click to rewrite it from the blocks - the blocks stay the same. Ctrl+Z in the code undoes it.': 'Kód v souboru je zapsaný jinak, než ho teď zapisují bloky (třeba starší verzí TypeBlocks). Kliknutím ho přepíšeš podle bloků - bloky zůstanou stejné. Ctrl+Z v kódu to vrátí.',
   "What does this block do?": "Co tenhle blok dělá?",
   "Example - you can change it": "Příklad - můžeš ho měnit",
   "The TypeScript it makes": "TypeScript, který z toho vznikne",

@@ -296,6 +296,9 @@ class Session {
         this.spans = m.spans ?? [];
         if (m.type === 'change') await this.writeFromBlocks(text);
         this.spansValid = text === this.doc.getText();
+        // the file is written differently than the blocks write it now (e.g. an older TypeBlocks version):
+        // offer the "Rewrite code" button
+        this.post({ type: 'outdated', outdated: !this.spansValid });
         if (!this.openedBeside && this.cfg().get<boolean>('openTsBeside', true)) {
           this.openedBeside = true;
           await vscode.window.showTextDocument(this.doc, { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true, preview: false });

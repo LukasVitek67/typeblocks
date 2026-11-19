@@ -21,6 +21,7 @@ ${o.csp ? `<meta http-equiv="Content-Security-Policy" content="${o.csp}">` : ''}
     <b>TypeBlocks</b><span id="fileName" class="file">program.ts</span>
   </div>
   <div class="actions">
+    <button id="rewrite" class="ghost rewrite" hidden title="${tr('The code in the file is written differently than these blocks write it now (e.g. by an older TypeBlocks). Click to rewrite it from the blocks - the blocks stay the same. Ctrl+Z in the code undoes it.')}"><i class="spin">↻</i>${tr('Rewrite code')}</button>
     <button id="cleanUp" class="ghost" title="${tr('Tidy up block positions')}">${tr('Tidy')}</button>
     <button id="showGuide" class="ghost help" title="${tr('Guide: how everything works (with examples)')}" aria-label="${tr('Guide')}">?</button>
     <button id="showCode" class="ghost" title="${tr('Back to the normal TypeScript editor')}"><i class="code">&lt;/&gt;</i>${tr('Code')}</button>

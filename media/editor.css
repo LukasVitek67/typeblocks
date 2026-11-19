@@ -722,3 +722,9 @@ body.vscode-light .hpCode .t-num { color: #b45309; } body.vscode-light .hpCode .
   .hpLab { grid-template-columns: 1fr; }
   .hpBlocks, .hpCode { height: 260px; }
 }
+
+/* "Rewrite code" - only shown when the file is written in an older way */
+#bar .rewrite { color: #2b1d00; background: #F2B33D; border-color: #F2B33D; font-weight: 700; }
+#bar .rewrite:hover { background: #f6c45f; }
+#bar .rewrite .spin { font-style: normal; margin-right: 4px; }
+#bar .rewrite[hidden] { display: none; }
