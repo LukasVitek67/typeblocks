@@ -25,7 +25,6 @@ export const ITEM_TYPES = ['string', 'number', 'boolean', 'any'] as const;
 /** Set by the webview: opens the editor for a raw-code block. */
 export const hooks: { editCode: (block: Blockly.Block) => void } = { editCode: () => {} };
 
-const SQUARE = 3; // zelos output shape used for arrays
 
 function mix(hex: string, target: number, f: number): string {
   const n = parseInt(hex.slice(1), 16);
@@ -141,7 +140,30 @@ function typeField(value: string): Blockly.FieldDropdown {
   return f;
 }
 
+/**
+ * Shapes of the sockets. Blockly (zelos) draws every socket of a block in the shape of the BLOCK ITSELF
+ * (so a square "filter" got square sockets, and round variables / hexagon conditions looked wrong in them).
+ * Here: a socket always has the shape of what sits in it; an empty one shows the usual content -
+ * hexagon where yes/no is expected, round everywhere else.
+ */
+function fixSocketShapes(): void {
+  type Provider = { shapeFor(c: Blockly.Connection): unknown; HEXAGONAL: unknown; ROUNDED: unknown };
+  const proto = (Blockly as unknown as { zelos: { ConstantProvider: { prototype: Provider & { tbShapes?: boolean } } } }).zelos.ConstantProvider.prototype;
+  if (proto.tbShapes) return;
+  proto.tbShapes = true;
+  const orig = proto.shapeFor;
+  proto.shapeFor = function (this: Provider, conn: Blockly.Connection) {
+    if (conn.type === Blockly.ConnectionType.INPUT_VALUE) {
+      if (conn.targetConnection) return orig.call(this, conn.targetConnection);
+      const checks = conn.getCheck();
+      return checks && checks.includes('Boolean') ? this.HEXAGONAL : this.ROUNDED;
+    }
+    return orig.call(this, conn);
+  };
+}
+
 export function defineBlocks(): void {
+  fixSocketShapes();
   // A file must always load: in TypeScript a number or text may stand where yes/no is expected
   // (if (list.length) ...), a text may be an index (record[key]) ... The hole shapes still show
   // what usually goes where, "Show what fits here" still filters by them, and tsc checks real errors.
@@ -351,9 +373,9 @@ export function defineBlocks(): void {
       type: 'ts_logic',
       message0: '%1 %2 %3',
       args0: [
-        { type: 'input_value', name: 'A' },
+        { type: 'input_value', name: 'A', check: 'Boolean' },
         { type: 'field_dropdown', name: 'OP', options: [['and', '&&'], ['or', '||'], ['or else (??)', '??']] },
-        { type: 'input_value', name: 'B' },
+        { type: 'input_value', name: 'B', check: 'Boolean' },
       ],
       inputsInline: true,
       output: 'Boolean',
@@ -363,7 +385,7 @@ export function defineBlocks(): void {
     {
       type: 'ts_not',
       message0: 'not %1',
-      args0: [{ type: 'input_value', name: 'A' }],
+      args0: [{ type: 'input_value', name: 'A', check: 'Boolean' }],
       output: 'Boolean',
       style: 'logic_blocks',
       tooltip: '!value',
@@ -574,7 +596,6 @@ export function defineBlocks(): void {
       args0: [{ type: 'input_value', name: 'TEXT' }, { type: 'input_value', name: 'SEP' }],
       inputsInline: true,
       output: null,
-      outputShape: SQUARE,
       style: 'list_blocks',
       tooltip: 'text.split(separator) - cuts text into an array.',
     },
@@ -616,24 +637,22 @@ export function defineBlocks(): void {
       args0: [img(ICONS.map), { type: 'input_value', name: 'LIST' }, { type: 'field_variable', name: 'VAR', variable: 'item' }, { type: 'input_value', name: 'VALUE' }],
       inputsInline: true,
       output: null,
-      outputShape: SQUARE,
       style: 'list_blocks',
       tooltip: 'list.map(...) - like a factory: every item goes in, a changed item comes out. The new array is just as long.',
     },
     {
       type: 'ts_arr_filter',
       message0: '%1 from %2 keep only each %3 where %4',
-      args0: [img(ICONS.filter), { type: 'input_value', name: 'LIST' }, { type: 'field_variable', name: 'VAR', variable: 'item' }, { type: 'input_value', name: 'COND' }],
+      args0: [img(ICONS.filter), { type: 'input_value', name: 'LIST' }, { type: 'field_variable', name: 'VAR', variable: 'item' }, { type: 'input_value', name: 'COND', check: 'Boolean' }],
       inputsInline: true,
       output: null,
-      outputShape: SQUARE,
       style: 'list_blocks',
       tooltip: 'list.filter(...) - like a sieve: only the items where the condition is true stay.',
     },
     {
       type: 'ts_arr_some',
       message0: '%1 is there any %2 in %3 where %4 ?',
-      args0: [img(ICONS.some), { type: 'field_variable', name: 'VAR', variable: 'item' }, { type: 'input_value', name: 'LIST' }, { type: 'input_value', name: 'COND' }],
+      args0: [img(ICONS.some), { type: 'field_variable', name: 'VAR', variable: 'item' }, { type: 'input_value', name: 'LIST' }, { type: 'input_value', name: 'COND', check: 'Boolean' }],
       inputsInline: true,
       output: 'Boolean',
       style: 'list_blocks',
@@ -642,7 +661,7 @@ export function defineBlocks(): void {
     {
       type: 'ts_arr_every',
       message0: '%1 is every %2 in %3 such that %4 ?',
-      args0: [img(ICONS.every), { type: 'field_variable', name: 'VAR', variable: 'item' }, { type: 'input_value', name: 'LIST' }, { type: 'input_value', name: 'COND' }],
+      args0: [img(ICONS.every), { type: 'field_variable', name: 'VAR', variable: 'item' }, { type: 'input_value', name: 'LIST' }, { type: 'input_value', name: 'COND', check: 'Boolean' }],
       inputsInline: true,
       output: 'Boolean',
       style: 'list_blocks',
@@ -651,7 +670,7 @@ export function defineBlocks(): void {
     {
       type: 'ts_arr_find',
       message0: '%1 first %2 in %3 where %4',
-      args0: [img(ICONS.contains), { type: 'field_variable', name: 'VAR', variable: 'item' }, { type: 'input_value', name: 'LIST' }, { type: 'input_value', name: 'COND' }],
+      args0: [img(ICONS.contains), { type: 'field_variable', name: 'VAR', variable: 'item' }, { type: 'input_value', name: 'LIST' }, { type: 'input_value', name: 'COND', check: 'Boolean' }],
       inputsInline: true,
       output: null,
       style: 'list_blocks',
@@ -660,7 +679,7 @@ export function defineBlocks(): void {
     {
       type: 'ts_arr_findindex',
       message0: '%1 index of the first %2 in %3 where %4',
-      args0: [img(ICONS.index), { type: 'field_variable', name: 'VAR', variable: 'item' }, { type: 'input_value', name: 'LIST' }, { type: 'input_value', name: 'COND' }],
+      args0: [img(ICONS.index), { type: 'field_variable', name: 'VAR', variable: 'item' }, { type: 'input_value', name: 'LIST' }, { type: 'input_value', name: 'COND', check: 'Boolean' }],
       inputsInline: true,
       output: 'Number',
       style: 'list_blocks',
@@ -777,7 +796,6 @@ function defineListLiteral(): void {
     init(this: ListBlock) {
       this.itemCount = 2;
       this.setOutput(true, null);
-      this.setOutputShape(SQUARE);
       this.setStyle('list_blocks');
       this.setInputsInline(true);
       this.setTooltip(tr('An array: a numbered row of values. The first one is index 0. Use + and - to add or remove slots.'));

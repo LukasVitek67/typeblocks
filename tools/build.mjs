@@ -77,7 +77,11 @@ if (watch) {
 
 // ---- preview page (open in a browser, no VS Code needed) ----
 fs.mkdirSync(r('preview'), { recursive: true });
-fs.writeFileSync(r('preview/index.html'), mod.pageHtml({ css: '../media/editor.css', js: '../media/webview.js', blocklyMedia: '../media/blockly/', lang: process.env.PREVIEW_LANG, previewWorkspace: mod.tsToBlocks(process.env.PREVIEW_FILE ? fs.readFileSync(process.env.PREVIEW_FILE, 'utf8') : mod.STARTER_TS).workspace }));
+// PREVIEW_CSP=noeval|eval: the same Content-Security-Policy as the VS Code webview (to reproduce / check CSP errors)
+const previewCsp = process.env.PREVIEW_CSP
+  ? `default-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; script-src 'nonce-pv'${process.env.PREVIEW_CSP === 'eval' ? " 'unsafe-eval'" : ''}`
+  : undefined;
+fs.writeFileSync(r('preview/index.html'), mod.pageHtml({ csp: previewCsp, nonce: previewCsp ? 'pv' : undefined, css: '../media/editor.css', js: '../media/webview.js', blocklyMedia: '../media/blockly/', lang: process.env.PREVIEW_LANG, previewWorkspace: mod.tsToBlocks(process.env.PREVIEW_FILE ? fs.readFileSync(process.env.PREVIEW_FILE, 'utf8') : mod.STARTER_TS).workspace }));
 
 // ---- guide: every example converted to blocks (media/guide-data.<lang>.js) + web copies in docs/guide ----
 const stamp = JSON.parse(fs.readFileSync(r('package.json'), 'utf8')).version + '-' + Date.now().toString(36);

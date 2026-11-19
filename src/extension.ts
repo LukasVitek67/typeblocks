@@ -489,7 +489,8 @@ class Session {
       `img-src ${webview.cspSource} data:`,
       `style-src ${webview.cspSource} 'unsafe-inline'`,
       `font-src ${webview.cspSource}`,
-      `script-src 'nonce-${nonce}'`,
+      // 'unsafe-eval': the "What does this block do?" window runs its example inside the page
+      `script-src 'nonce-${nonce}' 'unsafe-eval'`,
     ].join('; ');
     return pageHtml({ csp, nonce, css: u('editor.css'), js: u('webview.js'), blocklyMedia: u('blockly') + '/', lang: currentLang() });
   }

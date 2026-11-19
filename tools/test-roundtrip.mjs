@@ -477,6 +477,20 @@ for (const c of cases) {
   if (bad) failed++;
   else console.log(`ok   block guides  (${BLOCK_HELP.length}, every block type)`);
 }
+// every webview that runs example code (new Function / AsyncFunction) needs 'unsafe-eval' in its CSP,
+// otherwise Run in the guide / help window fails with "violates the Content Security Policy"
+{
+  const read = (p) => fs.readFileSync(path.join(root, p), 'utf8');
+  const usesEval = ['new Function(', 'AsyncFunction', 'new AsyncFn('].some((k) => (read('src/webview/help.ts') + read('src/guide/guide.ts')).includes(k));
+  const ext = read('src/extension.ts');
+  // (one policy per webview: the editor and the guide)
+  const withEval = ext.split("script-src 'nonce-").slice(1).filter((p) => p.slice(0, 60).includes("'unsafe-eval'")).length;
+  const total = ext.split("script-src 'nonce-").length - 1;
+  if (usesEval && withEval !== total) {
+    failed++;
+    console.log(`FAIL csp: ${total - withEval} of ${total} webview policies lack 'unsafe-eval' but the page runs example code`);
+  } else console.log(`ok   csp  (${withEval}/${total} webviews allow running examples)`);
+}
 console.log(failed ? `${failed} FAILED` : 'all passed');
 if (!failed) fs.rmSync(tmp, { recursive: true, force: true });
 process.exit(failed ? 1 : 0);
