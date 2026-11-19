@@ -191,12 +191,21 @@ class Session {
    * Writes what the blocks produce into the file. Only the changed part is replaced
    * (the code editor does not jump), and quick changes are queued so only the newest one is written.
    */
+  /** The blocks always write LF; the file may use CRLF (Windows, git autocrlf). Write in the file's own line endings. */
+  private inDocEol(text: string): string {
+    const lf = text.replace(/\r\n/g, '\n');
+    return this.doc.eol === vscode.EndOfLine.CRLF ? lf.replace(/\n/g, '\r\n') : lf;
+  }
+
   private writeFromBlocks(text: string): Promise<void> {
     this.queuedText = text;
     this.editChain = this.editChain.then(async () => {
-      const t = this.queuedText;
+      const q = this.queuedText;
       this.queuedText = undefined;
-      if (t === undefined) return;
+      if (q === undefined) return;
+      // same line endings as the file - otherwise VS Code converts them, our own write looks like
+      // a change from outside and the blocks reload (they jumped back while being dragged)
+      const t = this.inDocEol(q);
       const old = this.doc.getText();
       if (t === old) return;
       let a = 0;
@@ -295,7 +304,7 @@ class Session {
         const text = m.ts ?? '';
         this.spans = m.spans ?? [];
         if (m.type === 'change') await this.writeFromBlocks(text);
-        this.spansValid = text === this.doc.getText();
+        this.spansValid = sameText(text, this.doc.getText());
         // the file is written differently than the blocks write it now (e.g. an older TypeBlocks version):
         // offer the "Rewrite code" button
         this.post({ type: 'outdated', outdated: !this.spansValid });
@@ -665,4 +674,9 @@ class RunPty implements vscode.Pseudoterminal {
       }
     }
   }
+}
+
+/** Equal apart from line endings (LF vs CRLF). */
+function sameText(a: string, b: string): boolean {
+  return a.replace(/\r\n/g, '\n') === b.replace(/\r\n/g, '\n');
 }

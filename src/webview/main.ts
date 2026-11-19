@@ -486,7 +486,32 @@ function scheduleChange() {
   timer = window.setTimeout(() => emit('change'), 180);
 }
 
+let draggedId: string | null = null;
 ws.addChangeListener((e: Blockly.Events.Abstract) => {
+  if (e.type === Blockly.Events.BLOCK_DRAG) {
+    const d = e as Blockly.Events.BlockDrag;
+    if (d.isStart) draggedId = d.blockId ?? null;
+    else {
+      // the last move event of the drop comes right after this one
+      setTimeout(() => (draggedId = null), 0);
+      if (pendingLoad) {
+        const p = pendingLoad;
+        setTimeout(() => load(p.workspace, p.fresh), 0);
+      }
+    }
+  }
+  if (e.type === Blockly.Events.BLOCK_MOVE && !loading) {
+    const mv = e as Blockly.Events.BlockMove;
+    const moved = mv.blockId ? ws.getBlockById(mv.blockId) : null;
+    // only the block the user dragged (not the ones that just got a new neighbour)
+    const reallyMoved = !!mv.blockId && mv.blockId === draggedId && (mv.oldParentId !== mv.newParentId || mv.oldInputName !== mv.newInputName);
+    if (moved && reallyMoved) {
+      const m = meta(moved);
+      // a same-line comment (x = 1; // note) taken somewhere else is a normal comment line now -
+      // otherwise the code puts it back on the old line and the next reload snaps it back
+      if (m.same || m.blank) setMeta(moved, { same: false, blank: false });
+    }
+  }
   if (loading) return;
   if (e.type === Blockly.Events.SELECTED) {
     if (selectingFromEditor) return;
@@ -511,7 +536,14 @@ function mappedAncestor(id: string): string | null {
 }
 
 let loadedOnce = false;
+let pendingLoad: { workspace: object; fresh: boolean } | null = null;
+
 function load(workspace: object, fresh: boolean) {
+  if (ws.isDragging()) {
+    pendingLoad = { workspace, fresh };
+    return;
+  }
+  pendingLoad = null;
   const { scrollX, scrollY } = ws;
   const scale = ws.scale;
   // where the stacks were, in code order - after a reload (undo, edit in the code) they stay put
