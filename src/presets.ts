@@ -280,13 +280,13 @@ export const PRESETS: Preset[] = [
       title: 'Zeptej se na číslo a počítej',
       text: '„Zeptej se na číslo“ počká, až v konzoli napíšeš odpověď. Pak s ní můžeš počítat jako s každým jiným číslem.',
       tip: 'Spočítej, kolik ti bylo před 5 lety.',
-      code: c(['const vek = Number(await ask("Kolik ti je let?"));', 'console.log("Za 10 let ti bude " + (vek + 10));']),
+      code: c(['async function main(): Promise<void> {', '  const vek = Number(await ask("Kolik ti je let?"));', '  console.log("Za 10 let ti bude " + (vek + 10));', '}', 'main();']),
     },
     en: {
       title: 'Ask for a number and calculate',
       text: '"Ask for a number" waits until you type an answer in the console. Then you can calculate with it like with any other number.',
       tip: 'Work out how old you were 5 years ago.',
-      code: c(['const age = Number(await ask("How old are you?"));', 'console.log("In 10 years you will be " + (age + 10));']),
+      code: c(['async function main(): Promise<void> {', '  const age = Number(await ask("How old are you?"));', '  console.log("In 10 years you will be " + (age + 10));', '}', 'main();']),
     },
   },
   // ------------------------------------------------------------ functions

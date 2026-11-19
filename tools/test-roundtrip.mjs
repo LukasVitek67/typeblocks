@@ -304,7 +304,20 @@ for (let k = 0; k < text.length; k++) {
 console.log(i, Math.max(...[4, 9, 2]), -i, Number.isNaN(Number("x")), new Date(2026, 0, 1).getFullYear(), Object.keys(morse).join(","));
 `;
 
+// "wait" / "ask" blocks outside a function: the code must still run as CommonJS (no top-level await)
+const TOP_WAIT = `const pozdrav = "ahoj";
+console.log(pozdrav);
+for (let i = 1; i <= 2; i++) {
+  console.log("Hello!");
+  await sleep(0);
+}
+const greet = (who: string) => {
+  return sleep(0);
+};
+`;
+
 const cases = [
+  { name: 'top-level wait', src: TOP_WAIT, stdin: '', noRaw: true, keep: ['async function main(): Promise<void> {', 'main();'], expect: ['ahoj', 'Hello!\nHello!'] },
   {
     name: 'school assignments',
     src: SCHOOL,

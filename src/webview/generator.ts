@@ -134,6 +134,12 @@ export class TsGenerator extends JavascriptGenerator {
       let line = this.blockToCode(block);
       if (Array.isArray(line)) line = line[0];
       if (!line) continue;
+      // "await" outside a function only works in ES modules, not in CommonJS (Run, ts-node, most
+      // school projects). The universal way: put the steps into  async function main() { ... }  main();
+      if (!HATS.has(block.type) && !DEFS.includes(block.type) && chainWaits(block, this.asyncFns)) {
+        const fn = this.nameDB_!.getDistinctName('main', Blockly.Names.NameType.PROCEDURE);
+        line = `async function ${fn}()${this.typed ? ': Promise<void>' : ''} {\n${this.prefixLines(line, this.INDENT)}}\n${fn}();\n`;
+      }
       if (parts.length && (!prevComments || meta(block).blank)) parts.push('\n');
       parts.push(line);
       prevComments = onlyComments(block);
@@ -211,6 +217,27 @@ function onlyComments(block: Blockly.Block): boolean {
     if (b.type !== 'ts_comment' && !isBlockComment) return false;
   }
   return true;
+}
+
+const FUNCTION_LIKE = new Set(['ts_arrow', 'ts_arrow_block', ...DEFS]);
+
+/** Does this block (or something in it) wait - ask, sleep, await, call an async function? Not counting inner functions. */
+export function waits(block: Blockly.Block, asyncFns: Set<string>): boolean {
+  if (AWAITING.has(block.type) || block.type === 'ts_await') return true;
+  if (block.type.startsWith('procedures_call') && asyncFns.has(block.getFieldValue('NAME'))) return true;
+  for (const input of block.inputList) {
+    const child = input.connection?.targetBlock();
+    if (!child || FUNCTION_LIKE.has(child.type)) continue;
+    // methods of an object are functions of their own
+    if (block.type === 'ts_object' && input.type === Blockly.inputs.inputTypes.STATEMENT) continue;
+    if (chainWaits(child, asyncFns)) return true;
+  }
+  return false;
+}
+
+export function chainWaits(block: Blockly.Block, asyncFns: Set<string>): boolean {
+  for (let b: Blockly.Block | null = block; b; b = b.getNextBlock()) if (waits(b, asyncFns)) return true;
+  return false;
 }
 
 /** Which functions must be `async`: they were async, or they wait/ask/call an async function. */
@@ -616,13 +643,17 @@ Object.assign(OVERRIDES, {
     if (v.startsWith('{')) v = `(${v})`;
     const p = params(g, b.getFieldValue('PARAMS'));
     const head = m.bare && /^[A-Za-z_$][\w$]*$/.test(p) ? p : `(${p})`;
-    return [`${m.async ? 'async ' : ''}${head} => ${v}`, Order.ASSIGNMENT];
+    const inner = b.getInputTargetBlock('VALUE');
+    const isAsync = m.async || (!!inner && !FUNCTION_LIKE.has(inner.type) && chainWaits(inner, g.asyncFns));
+    return [`${isAsync ? 'async ' : ''}${head} => ${v}`, Order.ASSIGNMENT];
   }),
   ts_arrow_block: G((b, g) => {
     const m = meta(b);
     const p = params(g, b.getFieldValue('PARAMS'));
     const head = m.bare && /^[A-Za-z_$][\w$]*$/.test(p) ? p : `(${p})`;
-    return [`${m.async ? 'async ' : ''}${head} => {\n${g.statementToCode(b, 'DO')}}`, Order.ASSIGNMENT];
+    const inner = b.getInputTargetBlock('DO');
+    const isAsync = m.async || (!!inner && chainWaits(inner, g.asyncFns));
+    return [`${isAsync ? 'async ' : ''}${head} => {\n${g.statementToCode(b, 'DO')}}`, Order.ASSIGNMENT];
   }),
   ts_index: G((b, g) => [`${val(g, b, 'OBJ', Order.MEMBER, '[]')}[${val(g, b, 'KEY', Order.NONE, '0')}]`, Order.MEMBER]),
   ts_set_any: G((b, g) => {
