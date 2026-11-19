@@ -227,36 +227,37 @@ export function initFinder(ws: Blockly.WorkspaceSvg, opts: FinderOptions): { foc
     if (e.type === Blockly.Events.TOOLBOX_ITEM_SELECT) setFitTarget(null);
     if (e.type === Blockly.Events.BLOCK_DRAG && !(e as Blockly.Events.BlockDrag).isStart && fitTarget) setTimeout(() => setFitTarget(null), 0);
   });
-  let down: { x: number; y: number; id: string } | null = null;
-  const flyoutSvg = () => (flyout() as unknown as { svgGroup_?: SVGElement } | null)?.svgGroup_ ?? null;
-  document.addEventListener(
-    'pointerdown',
-    (ev) => {
-      const fs = flyoutSvg();
-      const g = (ev.target as Element | null)?.closest?.('g[data-id]');
-      down = fs && g && fs.contains(g) && ev.button === 0 ? { x: ev.clientX, y: ev.clientY, id: g.getAttribute('data-id')! } : null;
-    },
-    true,
-  );
-  document.addEventListener(
-    'pointerup',
-    (ev) => {
-      const d = down;
-      down = null;
-      if (!d || Math.hypot(ev.clientX - d.x, ev.clientY - d.y) > 4) return;
-      const fws = flyout()?.getWorkspace();
-      const b = fws?.getBlockById(d.id)?.getRootBlock();
-      if (!b) return;
-      const state = Blockly.serialization.blocks.save(b, { addCoordinates: false });
-      if (!state) return;
-      setTimeout(() => {
-        insertState(state);
-        flyout()?.hide();
-        toolbox.clearSelection();
-      }, 0);
-    },
-    true,
-  );
+  // Blockly itself puts a copy of a clicked palette block into the workspace (at the top left);
+  // we replace that: the click inserts exactly one block, where it makes sense.
+  type GestureLike = { flyout?: Blockly.IFlyout & { autoClose?: boolean; targetWorkspace?: Blockly.WorkspaceSvg }; targetBlock?: Blockly.BlockSvg; doBlockClick(): void };
+  const gesture = Blockly.Gesture.prototype as unknown as GestureLike;
+  const origBlockClick = gesture.doBlockClick;
+  gesture.doBlockClick = function (this: GestureLike) {
+    const fl = this.flyout;
+    const target = this.targetBlock;
+    if (fl && fl.autoClose && target && fl.targetWorkspace === ws) {
+      // the palette block as it is now (a text the user changed there is kept)
+      const state = Blockly.serialization.blocks.save(target, { addCoordinates: false });
+      fl.autoClose = false; // Blockly's own "copy the block" is skipped; the rest of the click is handled as usual
+      try {
+        origBlockClick.call(this);
+      } finally {
+        fl.autoClose = true;
+      }
+      if (state) {
+        setTimeout(() => {
+          insertState(state);
+          flyout()?.hide();
+          toolbox.clearSelection();
+        }, 0);
+      }
+      return;
+    }
+    origBlockClick.call(this);
+  };
+  // Text, numbers and dropdowns of the palette blocks can be changed right there (like in Scratch):
+  // change "Hello!" first, then drag or click the block. (Blockly makes a click on them insert the block instead.)
+  (Blockly.Field.prototype as unknown as { isClickableInFlyout: () => boolean }).isClickableInFlyout = () => true;
 
   // ------------------------------------------------------------ inserting a block
 
